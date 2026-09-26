@@ -1,0 +1,7 @@
+{
+  "name":"ai-world-atlas-v4",
+  "private":true,
+  "version":"4.0.0",
+  "scripts":{"dev":"concurrently \"npm --prefix apps/api run dev\" \"npm --prefix apps/web run dev\"","build":"npm --prefix apps/web run build","start":"npm --prefix apps/api start"},
+  "devDependencies":{"concurrently":"^9.1.2"}
+}
