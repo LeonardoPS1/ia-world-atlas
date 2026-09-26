@@ -332,7 +332,7 @@ export default tseslint.config(
     "dev": "node --experimental-strip-types --watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "db:migrate": "node --experimental-strip-types src/db/migrate.ts",
     "db:seed": "node --experimental-strip-types src/db/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed"
@@ -409,6 +409,25 @@ export default tseslint.config(
   "include": ["src/**/*.ts"]
 }
 ```
+
+`apps/api/tsconfig.test.json`:
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
+```
+
+The API test suite lives in `apps/api/test/`, outside `rootDir: "./src"`, so it cannot be added
+to the main tsconfig: `rootDir` is reported even under `--noEmit` (TS6059), and dropping
+`rootDir` would move the build output to `dist/src/server.js`, which breaks the Docker
+`CMD`. The second config exists so `typecheck` covers the five HTTP-level tests that
+`npm run check` depends on, and it emits nothing.
 
 `apps/web/tsconfig.json`:
 ```json
@@ -11496,9 +11515,10 @@ No tiles are requested in that mode.
 
 - [ ] **Step 4: Verify every command in the README actually exists**
 
-Run: `npm run 2>&1 | Select-String -Pattern 'dev|build|check|test:e2e|db:migrate|db:seed'`
-Expected: all six scripts listed in the README table exist. Fix any that do not rather
-than deleting the row.
+Run: `npm run 2>&1 | Select-String -Pattern 'dev|build|check|test:e2e|db:migrate|db:seed|db:setup|db:reset'`
+Expected: the output lists every script name in the README table. `npm run` with no argument
+prints the list of available scripts, so this is a listing command, not an error. Fix any
+missing script rather than deleting the row.
 
 - [ ] **Step 5: Commit**
 
