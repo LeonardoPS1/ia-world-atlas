@@ -2876,14 +2876,14 @@ describe('GET /api/health', () => {
 
   it('sets an x-request-id header on every response', async () => {
     const response = await request(app()).get('/api/health');
-    expect(response.headers['x-request-id']).toBeTruthy();
+    expect(response.headers['x-request-id']).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   it('answers 404 with a uniform error envelope for unknown routes', async () => {
     const response = await request(app()).get('/api/nope');
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('NOT_FOUND');
-    expect(response.body.error.requestId).toBeTruthy();
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
   });
 });
 ```
@@ -4108,7 +4108,7 @@ describe('GET /api/locations', () => {
     const response = await request(app).get('/api/locations?level=TOWN');
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
-    expect(response.body.error.requestId).toBeTruthy();
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
   });
 });
 
@@ -4203,14 +4203,15 @@ describe('GET /api/stats', () => {
 describe('write routes', () => {
   it('does not expose POST /api/projects', async () => {
     const response = await request(app).post('/api/projects').send({ id: 'hack' });
-    expect([404, 405]).toContain(response.status);
-    expect(response.body?.error?.code).toBeTruthy();
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NOT_FOUND');
   });
 
   it('does not expose PUT, PATCH or DELETE on projects', async () => {
     for (const method of ['put', 'patch', 'delete'] as const) {
       const response = await request(app)[method]('/api/projects/chile-national-ai-policy');
-      expect([404, 405]).toContain(response.status);
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('NOT_FOUND');
     }
   });
 });
@@ -4323,11 +4324,9 @@ describe('body limits', () => {
       .post('/api/projects')
       .set('Content-Type', 'application/json')
       .send({ padding: 'x'.repeat(1_100_000) });
-    expect([400, 404, 405, 413]).toContain(response.status);
-    if (response.body?.error) {
-      expect(response.body.error.code).toBeTruthy();
-      expect(response.body.error.requestId).toBeTruthy();
-    }
+    expect(response.status).toBe(413);
+    expect(response.body.error.code).toBe('PAYLOAD_TOO_LARGE');
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
   });
 });
 
@@ -4336,7 +4335,8 @@ describe('anonymous writes', () => {
     const app = appWith('http://localhost:5173');
     for (const method of ['post', 'put', 'patch', 'delete'] as const) {
       const response = await request(app)[method]('/api/projects').send({ id: 'injected' });
-      expect([404, 405]).toContain(response.status);
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('NOT_FOUND');
     }
   });
 });
@@ -4407,7 +4407,7 @@ describe('error contract', () => {
 Run: `npx vitest run --project api apps/api/test/security.test.ts apps/api/test/errors.test.ts`
 Expected: PASS, 2 files / 13 tests. The `413` branch already exists in `errorHandler` (Task 5, Step 5), so the body-limit test should pass on the first run.
 
-If any assertion fails, fix the production code — do not weaken the assertion. The only acceptable adjustment is broadening a **status** expectation to a set such as `[400, 404, 405, 413]` when the spec genuinely allows several outcomes; the *body* assertion must still hold for every status in the set.
+If any assertion fails, fix the production code — do not weaken the assertion. Every status in this file is pinned to one exact value, because the implementation has a defined answer for each case; a set such as `[400, 404, 405, 413]` would let a wrong implementation pass.
 
 Append this direct unit check to `apps/api/test/errors.test.ts` as well, because `HttpError.internal` is part of the public error surface and is not reachable through the fake repositories:
 
