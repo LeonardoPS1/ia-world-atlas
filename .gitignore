@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Environment — never commit real secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Test / coverage artifacts
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local data and uploads
+apps/api/data/*
+!apps/api/data/.gitkeep
+uploads/
+tmp/
+temp/
+
+# OpenCode local state
+.opencode/memory/*
+!.opencode/memory/.gitignore
+.opencode/cache/
+
+# Docs build artifacts (keep the reviewed PDF of the spec)
+docs/superpowers/specs/*.tmp.html
