@@ -184,7 +184,10 @@ ai-world-atlas/
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "db:migrate": "npm run db:migrate --workspace @atlas/api",
     "db:seed": "npm run db:seed --workspace @atlas/api",
-    "db:setup": "npm run db:setup --workspace @atlas/api"
+    "db:setup": "npm run db:setup --workspace @atlas/api",
+    "db:reset": "npm run db:reset --workspace @atlas/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -193,6 +196,7 @@ ai-world-atlas/
     "@vitest/coverage-v8": "^3.0.0",
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
+    "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vite": "^6.0.5",
@@ -202,6 +206,8 @@ ai-world-atlas/
 ```
 
 Note: `vitest run` at the root works because Vitest resolves `vitest.config.ts` in each workspace package through the `test.projects` file added in Step 8. Root `test` must NOT use `--workspaces` (each package's Vitest run is orchestrated by the root config so DB-integration skip logic lives in one place).
+
+Note: `format` and `format:check` run Prettier but are **not** part of `npm run check`. Formatting is not a gate; adding it there would make the gate fail on the legacy V4 files that Task 9 deletes.
 
 Note on `build` and `typecheck`: both build `@atlas/contracts` first, explicitly. `npm run build --workspaces` iterates workspaces in glob order, not topological order, and both apps resolve `@atlas/contracts` through its `dist` entry points, so an implicit order produces a confusing "cannot find module '@atlas/contracts'" failure. Never replace these with `--workspaces`.
 
@@ -560,7 +566,9 @@ Expected: lockfile `package-lock.json` created, three workspace links present, n
 - [ ] **Step 12: Verify the tooling skeleton typechecks**
 
 Run: `npm run typecheck`
-Expected: PASS. `apps/web` has no `src/main.ts` yet, so if TS complains about a missing entry, that is expected and must be resolved in Task 11 — do not create a stub `main.ts` here.
+Expected: **not green yet, and that is correct.** After this task the three packages hold config files but no `.ts` sources — the first sources arrive in Task 2 (`packages/contracts`) and Task 5 (`apps/api`) — so `tsc` exits 2 with `TS18003` ("No inputs were found in config file") for each empty package. The gate is not broken; it has nothing to check yet.
+
+Do **not** make it green by adding a stub `src/index.ts` (Task 2 creates that exact file), by setting `passWithNoTests`, or by loosening `tsc` options. Instead, prove each gate is real rather than vacuous: temporarily create a file with a deliberate type error, confirm `npm run typecheck` fails with it, then delete it. Do the same for `lint` and `test`. Record those three commands and their failing output in your report; that is the evidence the gates will catch real breakage from Task 2 onward.
 
 - [ ] **Step 13: Commit**
 
@@ -1981,6 +1989,7 @@ git commit -m "feat(api): add audited seed with eleven locations and verified so
 
 **Files:**
 - Create: `apps/api/src/config/env.ts`, `apps/api/src/config/env.test.ts`, `apps/api/src/config/logger.ts`, `apps/api/src/errors/HttpError.ts`, `apps/api/src/errors/errorHandler.ts`, `apps/api/src/middleware/requestId.ts`, `apps/api/src/middleware/security.ts`, `apps/api/src/repositories/types.ts`, `apps/api/src/services/filters.ts`, `apps/api/src/services/filters.test.ts`, `apps/api/src/repositories/fake.ts`, `apps/api/src/testing/fixtures.ts`, `apps/api/src/app.ts`, `apps/api/src/server.ts`, `apps/api/test/health.test.ts`
+- Delete: `apps/api/src/server.js` — the legacy V4 entry point. This task writes `apps/api/src/server.ts` beside it, and two entry points in one package is a trap: Node's resolver would pick one unpredictably, and the legacy file fails `npm run lint` (it is one of the P0 findings), which keeps the gate red for the rest of the plan. Delete it in the step that writes `server.ts`, with `git rm`.
 
 **Interfaces:**
 - Consumes: `@atlas/contracts` (Task 2), `PoolLike` (Task 3).
@@ -2893,7 +2902,13 @@ describe('GET /api/health', () => {
 Run: `npx vitest run --project api apps/api/test/health.test.ts`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 18: Implement `src/server.ts` and wire the `db:*` scripts to real entry points**
+- [ ] **Step 18: Delete the legacy entry point, then implement `src/server.ts` and wire the `db:*` scripts to real entry points**
+
+Delete first, so the two entry points never coexist:
+
+```bash
+git rm -q apps/api/src/server.js
+```
 
 `apps/api/src/server.ts`:
 ```ts
