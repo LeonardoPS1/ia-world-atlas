@@ -281,7 +281,7 @@ El seed no crea relaciones si la fuente no las documenta; el frontend muestra un
 - GIN sobre una expresión inmutable, registrada como `projects_search_idx`:
   `to_tsvector('spanish'::regconfig, coalesce(name,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(array_to_string(tags,' '),''))`.
   El `::regconfig` fijo es obligatorio: PostgreSQL exige que la configuración sea constante para indexar.
-- La búsqueda usa el mismo predicado que el índice, con `plainto_tsquery('spanish', q)` yRanking por `ts_rank`; el `ILIKE` queda sólo como fallback para tokens de menos de 3 caracteres.
+-    La búsqueda usa el mismo predicado que el índice, con `plainto_tsquery('spanish', q)` y ranking por `ts_rank`; el `ILIKE` queda sólo como fallback para tokens de menos de 3 caracteres.
 - B-tree en `sources(source_type)`, `events(occurred_at)`, `status_history(project_id, changed_at)`.
 
 ---
@@ -361,7 +361,7 @@ Reglas:
 - `page` inicia en 1; `pageSize` por defecto 50 y máximo 200. Ambos aplican a `/api/locations` y a `/api/projects`.
 - `sort` acepta `publishedAt` y `name`.
 - `type`, `status` y `evidence` aceptan repetición (`?type=POLICY&type=RESEARCH`) y valores separados por coma (`?type=POLICY,RESEARCH`), con semántica OR dentro del mismo parámetro y AND entre parámetros distintos.
-- `q` usa `websearch_to_tsquery('spanish', ...)` con fallback `ILIKE` para nombres parciales.
+- `q` usa `plainto_tsquery('spanish', q)` con ranking por `ts_rank` y fallback `ILIKE` para tokens de menos de 3 caracteres o nombres parciales.
 - `locationId` incluye descendientes mediante CTE recursiva.
 - `GET /api/projects/:id` incluye `location`, `sources`, `events`, `relations`, `statusHistory` e `impactRecords`.
 - No existe `POST /api/projects`; una escritura anónima devuelve 404/405.
