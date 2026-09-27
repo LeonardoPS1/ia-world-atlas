@@ -11920,3 +11920,14 @@ Do not mark such a step complete locally; mark it verified in CI or leave it ope
 **Every task ends with a commit.** The commit messages form the history of the delivery:
 baseline, then contracts, then schema, then seed, then API, then frontend, then tests, then
 delivery. A reviewer should be able to read `git log` and reconstruct what happened.
+
+**`tsc` does not prune stale build output.** If you change an `include` or add an `exclude` in
+any tsconfig, delete the affected `dist` and rebuild before you conclude anything about the
+build result. A removed file stays in `dist` forever otherwise, and a green build next to a
+stale artefact looks like a passing verification.
+
+**A negative assertion over a hand-built fixture proves nothing until the fixture is pinned.**
+Write the positive twin in the same commit, or mutate the line under test and confirm the test
+goes red. Task 2 shipped a `validSource` whose `sourceType` was not in `SOURCE_TYPES`, so the
+fixture failed on the enum before the timestamp was ever evaluated and the assertion passed
+against the exact defect it was written to catch.
