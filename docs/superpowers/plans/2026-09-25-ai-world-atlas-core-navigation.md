@@ -313,12 +313,27 @@ export default tseslint.config(
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": { "zod": "^3.24.1" },
   "devDependencies": { "typescript": "^5.7.2" }
 }
 ```
+
+`packages/contracts/tsconfig.test.json`:
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/**/*.ts"]
+}
+```
+
+Two configs, because `tsconfig.json` has to exclude `__tests__` for the build while `typecheck` must still
+cover the tests. Adding `exclude` alone would have quietly dropped the two test files out of the
+typecheck program, which is the exact coverage loss Task 1's `apps/api/tsconfig.test.json` already
+exists to prevent. A single `tsconfig.json` cannot be both "emit the package" and "check the tests"
+once the tests live under `src/`.
 
 `apps/api/package.json`:
 ```json
@@ -398,7 +413,7 @@ export default tseslint.config(
 }
 ```
 
-The `exclude` is load-bearing, not cosmetic. Without it this package emits `dist/__tests__/schemas.test.js`, and that file does `import 'vitest'` at runtime. The API Dockerfile runs `npm prune --omit=dev`, so in production the file would sit in the image with no `vitest` to resolve. Excluding it does not affect `vitest`, which collects `**/*.test.ts` on its own.
+The `exclude` is load-bearing, not cosmetic. Without it this package emits `dist/__tests__/schemas.test.js`, and that file does `import 'vitest'` at runtime. The API Dockerfile runs `npm prune --omit=dev`, so in production the file would sit in the image with no `vitest` to resolve. Excluding it does not affect `vitest`, which collects `**/*.test.ts` on its own. Because this file also backs `typecheck`, `packages/contracts/tsconfig.test.json` below is what restores test coverage there.
 
 `apps/api/tsconfig.json`:
 ```json
@@ -781,10 +796,13 @@ Expected: PASS, 3 tests.
 ```ts
 import { describe, expect, it } from 'vitest';
 import {
+  healthResponseSchema,
   projectSummarySchema,
   srcUrlSchema,
   statsResponseSchema,
   projectTypeSchema,
+  sourceSchema,
+  statusHistoryEntrySchema,
 } from '../schemas.js';
 
 const validSummary = {
@@ -805,6 +823,35 @@ const validSummary = {
   lastVerifiedAt: '2026-09-25T00:00:00.000Z',
   sourceCount: 1,
   eventCount: 1,
+};
+
+const validSource = {
+  id: 'src-1',
+  name: 'Ley 19.628',
+  url: 'https://www.bcn.cl/leychile/navegar?idNorma=297746',
+  sourceType: 'LAW',
+  publicationDate: '2021-10-01T00:00:00.000Z',
+  lastVerifiedAt: '2026-09-25T00:00:00.000Z',
+  confidence: 'HIGH',
+  snippet: 'Texto oficial de la ley.',
+  isPrimary: true,
+};
+
+const validHistory = {
+  id: 1,
+  fromStatus: null,
+  toStatus: 'ACTIVE',
+  changedAt: '2021-10-01T00:00:00.000Z',
+  note: 'Publicación inicial.',
+  sourceId: 'src-1',
+};
+
+const validHealth = {
+  status: 'ok',
+  api: 'atlas-api',
+  database: 'up',
+  version: '0.1.0',
+  time: '2026-09-25T12:00:00.000Z',
 };
 
 describe('wire schemas', () => {
@@ -828,6 +875,12 @@ describe('wire schemas', () => {
 
   it('accepts a null publishedAt, because the column is nullable', () => {
     expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: null }).success).toBe(true);
+  });
+
+  it('validates timestamps on every schema that carries one', () => {
+    expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
+    expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
+    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
   });
 
   it('accepts https and http but rejects javascript and data protocols', () => {
@@ -889,12 +942,12 @@ const isoDate = z
   .min(10)
   .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
-// Every timestamp in this package goes through `isoDate`. The columns behind
-// them are `timestamptz`, so a bare `z.string()` would let a malformed value
-// cross the wire and surface later as `NaN` from `new Date(...)` in the web
-// timeline, far from the query that produced it. `isoDate` is deliberately a
-// floor, not a full ISO parser: it rejects the junk a bad cast produces
-// without trying to enumerate every legal ISO-8601 form.
+// Every timestamp in this package goes through `isoDate`, including
+// `healthResponseSchema.time`. The columns behind the rest are `timestamptz`, so a
+// bare `z.string()` would let a malformed value cross the wire and surface later as
+// `NaN` from `new Date(...)` in the web timeline, far from the query that produced
+// it. `isoDate` is deliberately a floor, not a full ISO parser: it rejects the junk a
+// bad cast produces without trying to enumerate every legal ISO-8601 form.
 
 export const srcUrlSchema = z
   .string()
@@ -1022,7 +1075,7 @@ export const healthResponseSchema = z.object({
   api: z.literal('atlas-api'),
   database: z.enum(['up', 'down']),
   version: z.string().min(1),
-  time: z.string().min(1),
+  time: isoDate,
 });
 
 export const apiErrorSchema = z.object({
@@ -1116,7 +1169,7 @@ export type * from './types.js';
 - [ ] **Step 9: Run all contract tests and typecheck**
 
 Run: `npx vitest run packages/contracts && npm run typecheck --workspace @atlas/contracts`
-Expected: PASS, 10 tests total across both files (3 vocabulary + 7 schema), and `tsc --noEmit` clean.
+Expected: PASS, 11 tests total across both files (3 vocabulary + 8 schema), and `tsc --noEmit` clean.
 
 - [ ] **Step 10: Build the package so the apps can resolve it**
 
