@@ -74,7 +74,9 @@ describe('wire schemas', () => {
 
   it('rejects a timestamp that is not a real date', () => {
     expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: 'not a date' }).success).toBe(false);
-    expect(projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'someday' }).success).toBe(false);
+    expect(
+      projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'definitely not a date' }).success,
+    ).toBe(false);
   });
 
   it('accepts a null publishedAt, because the column is nullable', () => {
@@ -82,9 +84,13 @@ describe('wire schemas', () => {
   });
 
   it('validates timestamps on every schema that carries one', () => {
-    expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
-    expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
-    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
+    expect(
+      sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'definitely not a date' }).success,
+    ).toBe(false);
+    expect(
+      statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'definitely not a date' }).success,
+    ).toBe(false);
+    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'definitely not a date' }).success).toBe(false);
   });
 
   it('accepts each of those fixtures unchanged, so the negative tests above are not vacuous', () => {
@@ -108,6 +114,20 @@ describe('wire schemas', () => {
       byStatus: { ACTIVE: 4, DEPLOYING: 1 },
     });
     expect(stats.totals.projects).toBe(5);
-    expect(Object.keys(stats.byEvidence)).toEqual(['REPORTED', 'ANNOUNCED']);
+    expect(stats.byEvidence).toEqual({ REPORTED: 4, ANNOUNCED: 1 });
+  });
+
+  it('rejects a count map keyed outside its vocabulary', () => {
+    const base = {
+      totals: { projects: 5, locations: 11, sources: 6 },
+      byType: { POLICY: 1 },
+      byStatus: { ACTIVE: 4 },
+    };
+    expect(
+      statsResponseSchema.safeParse({ ...base, byEvidence: { NOT_A_REAL_EVIDENCE_LEVEL: 7 } }).success,
+    ).toBe(false);
+    expect(statsResponseSchema.safeParse({ ...base, byType: { POLICY: 1 }, byStatus: { NOPE: 1 } }).success).toBe(
+      false,
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
   SOURCE_TYPES,
   TIMELINE_SORTS,
 } from './vocabularies.js';
+import type { Paginated } from './types.js';
 
 export const projectTypeSchema = z.enum(PROJECT_TYPES);
 export const projectStatusSchema = z.enum(PROJECT_STATUSES);
@@ -23,17 +24,16 @@ export const relationDirectionSchema = z.enum(RELATION_DIRECTIONS);
 export const impactCategorySchema = z.enum(IMPACT_CATEGORIES);
 export const sortSchema = z.enum(TIMELINE_SORTS);
 
-const isoDate = z
-  .string()
-  .min(10)
-  .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
-
 // Every timestamp in this package goes through `isoDate`, including
 // `healthResponseSchema.time`. The columns behind the rest are `timestamptz`, so a
 // bare `z.string()` would let a malformed value cross the wire and surface later as
 // `NaN` from `new Date(...)` in the web timeline, far from the query that produced
 // it. `isoDate` is deliberately a floor, not a full ISO parser: it rejects the junk a
 // bad cast produces without trying to enumerate every legal ISO-8601 form.
+const isoDate = z
+  .string()
+  .min(10)
+  .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
 export const srcUrlSchema = z
   .string()
@@ -143,7 +143,16 @@ export const projectDetailSchema = projectSummarySchema.extend({
   geometrySource: z.enum(['project', 'location']),
 });
 
-const countMap = z.record(z.number().int().nonnegative());
+// A count map is keyed by a vocabulary, so the key set is part of the contract.
+// Without this, `byEvidence: { NOT_A_REAL_EVIDENCE_LEVEL: 7 }` parses, and the API can
+// emit a distribution nobody downstream knows how to read.
+function countMap(allowed: readonly string[]) {
+  return z
+    .record(z.number().int().nonnegative())
+    .refine((map) => Object.keys(map).every((key) => allowed.includes(key)), {
+      message: 'count map contains a key outside its vocabulary',
+    });
+}
 
 export const statsResponseSchema = z.object({
   totals: z.object({
@@ -151,9 +160,9 @@ export const statsResponseSchema = z.object({
     locations: z.number().int().nonnegative(),
     sources: z.number().int().nonnegative(),
   }),
-  byEvidence: countMap,
-  byType: countMap,
-  byStatus: countMap,
+  byEvidence: countMap(EVIDENCE_LEVELS),
+  byType: countMap(PROJECT_TYPES),
+  byStatus: countMap(PROJECT_STATUSES),
 });
 
 export const healthResponseSchema = z.object({
@@ -173,7 +182,7 @@ export const apiErrorSchema = z.object({
   }),
 });
 
-export function paginatedSchema<T extends z.ZodTypeAny>(item: T) {
+export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<T>> {
   return z.object({
     data: z.array(item),
     page: z.number().int().positive(),

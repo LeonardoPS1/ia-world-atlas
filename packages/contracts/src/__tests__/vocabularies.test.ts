@@ -8,6 +8,8 @@ import {
   PROJECT_TYPES,
   RELATION_TYPES,
   SOURCE_TYPES,
+  RELATION_DIRECTIONS,
+  TIMELINE_SORTS,
 } from '../vocabularies.js';
 
 describe('closed vocabularies', () => {
@@ -40,5 +42,85 @@ describe('closed vocabularies', () => {
   it('includes CITY and LOCAL_AREA as distinct location levels', () => {
     expect(LOCATION_LEVELS).toContain('CITY');
     expect(LOCATION_LEVELS).toContain('LOCAL_AREA');
+  });
+
+  it('pins every member, so a same-cardinality corruption is not silent', () => {
+    expect(PROJECT_TYPES).toEqual([
+      'PROJECT',
+      'NEWS',
+      'LAUNCH',
+      'COMPANY',
+      'GOVERNMENT',
+      'UNIVERSITY',
+      'RESEARCH',
+      'INFRASTRUCTURE',
+      'ROBOTICS',
+      'POLICY',
+      'INVESTMENT',
+      'EDUCATION',
+      'APPLICATION',
+      'IMPACT',
+      'SIGNAL',
+      'POSSIBILITY',
+    ]);
+    expect(PROJECT_STATUSES).toEqual([
+      'IDEA',
+      'RESEARCH',
+      'ANNOUNCED',
+      'FUNDED',
+      'PILOT',
+      'BUILDING',
+      'DEPLOYING',
+      'ACTIVE',
+      'SCALING',
+      'COMPLETED',
+      'PAUSED',
+      'CANCELLED',
+    ]);
+    expect(EVIDENCE_LEVELS).toEqual([
+      'VERIFIED',
+      'REPORTED',
+      'ANNOUNCED',
+      'ANALYSIS',
+      'SIGNAL',
+      'POSSIBILITY',
+    ]);
+    expect(LOCATION_LEVELS).toEqual(['WORLD', 'CONTINENT', 'COUNTRY', 'REGION', 'CITY', 'LOCAL_AREA']);
+    expect(SOURCE_TYPES).toEqual([
+      'GOVERNMENT',
+      'UNIVERSITY',
+      'ORGANIZATION',
+      'COMPANY',
+      'PAPER',
+      'MEDIA',
+      'OTHER',
+    ]);
+    expect(CONFIDENCE_LEVELS).toEqual(['HIGH', 'MEDIUM', 'LOW']);
+    expect(RELATION_TYPES).toEqual([
+      'PARTNERSHIP',
+      'FUNDING',
+      'RESEARCH',
+      'INFRASTRUCTURE',
+      'GOVERNMENT',
+      'SUPPLIER',
+      'UNIVERSITY',
+      'DEPLOYMENT',
+      'LOCATION',
+      'POLICY',
+      'TECHNOLOGY',
+      'INVESTMENT',
+    ]);
+    expect(IMPACT_CATEGORIES).toEqual([
+      'ECONOMIC',
+      'SOCIAL',
+      'EDUCATIONAL',
+      'HEALTH',
+      'ENVIRONMENTAL',
+      'INFRASTRUCTURE',
+      'REGULATORY',
+      'OTHER',
+    ]);
+    expect(RELATION_DIRECTIONS).toEqual(['OUTGOING', 'INCOMING']);
+    expect(TIMELINE_SORTS).toEqual(['publishedAt', 'name']);
   });
 });
