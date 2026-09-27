@@ -393,9 +393,12 @@ export default tseslint.config(
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "./dist", "rootDir": "./src" },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/__tests__/**"]
 }
 ```
+
+The `exclude` is load-bearing, not cosmetic. Without it this package emits `dist/__tests__/schemas.test.js`, and that file does `import 'vitest'` at runtime. The API Dockerfile runs `npm prune --omit=dev`, so in production the file would sit in the image with no `vitest` to resolve. Excluding it does not affect `vitest`, which collects `**/*.test.ts` on its own.
 
 `apps/api/tsconfig.json`:
 ```json
@@ -818,6 +821,15 @@ describe('wire schemas', () => {
     expect(parsed.success).toBe(false);
   });
 
+  it('rejects a timestamp that is not a real date', () => {
+    expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: 'not a date' }).success).toBe(false);
+    expect(projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'someday' }).success).toBe(false);
+  });
+
+  it('accepts a null publishedAt, because the column is nullable', () => {
+    expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: null }).success).toBe(true);
+  });
+
   it('accepts https and http but rejects javascript and data protocols', () => {
     expect(srcUrlSchema.safeParse('https://example.org/a').success).toBe(true);
     expect(srcUrlSchema.safeParse('http://localhost:3000/a').success).toBe(true);
@@ -877,6 +889,13 @@ const isoDate = z
   .min(10)
   .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
+// Every timestamp in this package goes through `isoDate`. The columns behind
+// them are `timestamptz`, so a bare `z.string()` would let a malformed value
+// cross the wire and surface later as `NaN` from `new Date(...)` in the web
+// timeline, far from the query that produced it. `isoDate` is deliberately a
+// floor, not a full ISO parser: it rejects the junk a bad cast produces
+// without trying to enumerate every legal ISO-8601 form.
+
 export const srcUrlSchema = z
   .string()
   .min(1)
@@ -912,7 +931,7 @@ export const sourceSchema = z.object({
   url: srcUrlSchema,
   sourceType: sourceTypeSchema,
   publicationDate: isoDate.nullable(),
-  lastVerifiedAt: z.string().min(1),
+  lastVerifiedAt: isoDate,
   confidence: confidenceSchema,
   snippet: z.string().min(1),
   isPrimary: z.boolean(),
@@ -942,7 +961,7 @@ export const statusHistoryEntrySchema = z.object({
   id: z.number().int(),
   fromStatus: projectStatusSchema.nullable(),
   toStatus: projectStatusSchema,
-  changedAt: z.string().min(1),
+  changedAt: isoDate,
   note: z.string().nullable(),
   sourceId: z.string().nullable(),
 });
@@ -968,8 +987,8 @@ export const projectSummarySchema = z.object({
   latitude: z.number().min(-90).max(90),
   actors: z.array(z.string()),
   tags: z.array(z.string()),
-  publishedAt: z.string().nullable(),
-  lastVerifiedAt: z.string().min(1),
+  publishedAt: isoDate.nullable(),
+  lastVerifiedAt: isoDate,
   sourceCount: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
 });
@@ -1097,7 +1116,7 @@ export type * from './types.js';
 - [ ] **Step 9: Run all contract tests and typecheck**
 
 Run: `npx vitest run packages/contracts && npm run typecheck --workspace @atlas/contracts`
-Expected: PASS, 8 tests total across both files, and `tsc --noEmit` clean.
+Expected: PASS, 10 tests total across both files (3 vocabulary + 7 schema), and `tsc --noEmit` clean.
 
 - [ ] **Step 10: Build the package so the apps can resolve it**
 
