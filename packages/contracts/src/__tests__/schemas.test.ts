@@ -40,6 +40,15 @@ describe('wire schemas', () => {
     expect(parsed.success).toBe(false);
   });
 
+  it('rejects a timestamp that is not a real date', () => {
+    expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: 'not a date' }).success).toBe(false);
+    expect(projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'someday' }).success).toBe(false);
+  });
+
+  it('accepts a null publishedAt, because the column is nullable', () => {
+    expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: null }).success).toBe(true);
+  });
+
   it('accepts https and http but rejects javascript and data protocols', () => {
     expect(srcUrlSchema.safeParse('https://example.org/a').success).toBe(true);
     expect(srcUrlSchema.safeParse('http://localhost:3000/a').success).toBe(true);

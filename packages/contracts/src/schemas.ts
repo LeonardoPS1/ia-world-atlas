@@ -28,6 +28,13 @@ const isoDate = z
   .min(10)
   .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
+// Every timestamp in this package goes through `isoDate`. The columns behind
+// them are `timestamptz`, so a bare `z.string()` would let a malformed value
+// cross the wire and surface later as `NaN` from `new Date(...)` in the web
+// timeline, far from the query that produced it. `isoDate` is deliberately a
+// floor, not a full ISO parser: it rejects the junk a bad cast produces
+// without trying to enumerate every legal ISO-8601 form.
+
 export const srcUrlSchema = z
   .string()
   .min(1)
@@ -63,7 +70,7 @@ export const sourceSchema = z.object({
   url: srcUrlSchema,
   sourceType: sourceTypeSchema,
   publicationDate: isoDate.nullable(),
-  lastVerifiedAt: z.string().min(1),
+  lastVerifiedAt: isoDate,
   confidence: confidenceSchema,
   snippet: z.string().min(1),
   isPrimary: z.boolean(),
@@ -93,7 +100,7 @@ export const statusHistoryEntrySchema = z.object({
   id: z.number().int(),
   fromStatus: projectStatusSchema.nullable(),
   toStatus: projectStatusSchema,
-  changedAt: z.string().min(1),
+  changedAt: isoDate,
   note: z.string().nullable(),
   sourceId: z.string().nullable(),
 });
@@ -119,8 +126,8 @@ export const projectSummarySchema = z.object({
   latitude: z.number().min(-90).max(90),
   actors: z.array(z.string()),
   tags: z.array(z.string()),
-  publishedAt: z.string().nullable(),
-  lastVerifiedAt: z.string().min(1),
+  publishedAt: isoDate.nullable(),
+  lastVerifiedAt: isoDate,
   sourceCount: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
 });
