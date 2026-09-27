@@ -646,6 +646,8 @@ import {
   PROJECT_TYPES,
   RELATION_TYPES,
   SOURCE_TYPES,
+  RELATION_DIRECTIONS,
+  TIMELINE_SORTS,
 } from '../vocabularies.js';
 
 describe('closed vocabularies', () => {
@@ -678,6 +680,86 @@ describe('closed vocabularies', () => {
   it('includes CITY and LOCAL_AREA as distinct location levels', () => {
     expect(LOCATION_LEVELS).toContain('CITY');
     expect(LOCATION_LEVELS).toContain('LOCAL_AREA');
+  });
+
+  it('pins every member, so a same-cardinality corruption is not silent', () => {
+    expect(PROJECT_TYPES).toEqual([
+      'PROJECT',
+      'NEWS',
+      'LAUNCH',
+      'COMPANY',
+      'GOVERNMENT',
+      'UNIVERSITY',
+      'RESEARCH',
+      'INFRASTRUCTURE',
+      'ROBOTICS',
+      'POLICY',
+      'INVESTMENT',
+      'EDUCATION',
+      'APPLICATION',
+      'IMPACT',
+      'SIGNAL',
+      'POSSIBILITY',
+    ]);
+    expect(PROJECT_STATUSES).toEqual([
+      'IDEA',
+      'RESEARCH',
+      'ANNOUNCED',
+      'FUNDED',
+      'PILOT',
+      'BUILDING',
+      'DEPLOYING',
+      'ACTIVE',
+      'SCALING',
+      'COMPLETED',
+      'PAUSED',
+      'CANCELLED',
+    ]);
+    expect(EVIDENCE_LEVELS).toEqual([
+      'VERIFIED',
+      'REPORTED',
+      'ANNOUNCED',
+      'ANALYSIS',
+      'SIGNAL',
+      'POSSIBILITY',
+    ]);
+    expect(LOCATION_LEVELS).toEqual(['WORLD', 'CONTINENT', 'COUNTRY', 'REGION', 'CITY', 'LOCAL_AREA']);
+    expect(SOURCE_TYPES).toEqual([
+      'GOVERNMENT',
+      'UNIVERSITY',
+      'ORGANIZATION',
+      'COMPANY',
+      'PAPER',
+      'MEDIA',
+      'OTHER',
+    ]);
+    expect(CONFIDENCE_LEVELS).toEqual(['HIGH', 'MEDIUM', 'LOW']);
+    expect(RELATION_TYPES).toEqual([
+      'PARTNERSHIP',
+      'FUNDING',
+      'RESEARCH',
+      'INFRASTRUCTURE',
+      'GOVERNMENT',
+      'SUPPLIER',
+      'UNIVERSITY',
+      'DEPLOYMENT',
+      'LOCATION',
+      'POLICY',
+      'TECHNOLOGY',
+      'INVESTMENT',
+    ]);
+    expect(IMPACT_CATEGORIES).toEqual([
+      'ECONOMIC',
+      'SOCIAL',
+      'EDUCATIONAL',
+      'HEALTH',
+      'ENVIRONMENTAL',
+      'INFRASTRUCTURE',
+      'REGULATORY',
+      'OTHER',
+    ]);
+    expect(RELATION_DIRECTIONS).toEqual(['OUTGOING', 'INCOMING']);
+    expect(TIMELINE_SORTS).toEqual(['publishedAt', 'name']);
   });
 });
 ```
@@ -788,7 +870,9 @@ export const TIMELINE_SORTS = ['publishedAt', 'name'] as const;
 - [ ] **Step 4: Run the vocabulary test and confirm it passes**
 
 Run: `npx vitest run packages/contracts/src/__tests__/vocabularies.test.ts`
-Expected: PASS, 3 tests.
+Expected: PASS, 4 tests.
+
+The cardinality test and the pinning test are not redundant. Cardinality alone cannot see `'CONTINENT'` → `'PLANET'` or `'MEDIA'` → `'BLOG'`, and Task 3 mirrors these exact arrays into SQL `CHECK` constraints, where a silent divergence only shows up as an `INSERT` failing against a live Postgres. The two older tests are kept as the diagnosis when the pin fails: "contains no duplicates" separates a corrupted member from a reordered list, and "CITY and LOCAL_AREA" names the specific pair a future edit is most likely to merge.
 
 - [ ] **Step 5: Write the failing schema test**
 
@@ -870,7 +954,9 @@ describe('wire schemas', () => {
 
   it('rejects a timestamp that is not a real date', () => {
     expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: 'not a date' }).success).toBe(false);
-    expect(projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'someday' }).success).toBe(false);
+    expect(
+      projectSummarySchema.safeParse({ ...validSummary, lastVerifiedAt: 'definitely not a date' }).success,
+    ).toBe(false);
   });
 
   it('accepts a null publishedAt, because the column is nullable', () => {
@@ -878,9 +964,13 @@ describe('wire schemas', () => {
   });
 
   it('validates timestamps on every schema that carries one', () => {
-    expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
-    expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
-    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
+    expect(
+      sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'definitely not a date' }).success,
+    ).toBe(false);
+    expect(
+      statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'definitely not a date' }).success,
+    ).toBe(false);
+    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'definitely not a date' }).success).toBe(false);
   });
 
   it('accepts each of those fixtures unchanged, so the negative tests above are not vacuous', () => {
@@ -904,7 +994,21 @@ describe('wire schemas', () => {
       byStatus: { ACTIVE: 4, DEPLOYING: 1 },
     });
     expect(stats.totals.projects).toBe(5);
-    expect(Object.keys(stats.byEvidence)).toEqual(['REPORTED', 'ANNOUNCED']);
+    expect(stats.byEvidence).toEqual({ REPORTED: 4, ANNOUNCED: 1 });
+  });
+
+  it('rejects a count map keyed outside its vocabulary', () => {
+    const base = {
+      totals: { projects: 5, locations: 11, sources: 6 },
+      byType: { POLICY: 1 },
+      byStatus: { ACTIVE: 4 },
+    };
+    expect(
+      statsResponseSchema.safeParse({ ...base, byEvidence: { NOT_A_REAL_EVIDENCE_LEVEL: 7 } }).success,
+    ).toBe(false);
+    expect(statsResponseSchema.safeParse({ ...base, byType: { POLICY: 1 }, byStatus: { NOPE: 1 } }).success).toBe(
+      false,
+    );
   });
 });
 ```
@@ -931,6 +1035,7 @@ import {
   SOURCE_TYPES,
   TIMELINE_SORTS,
 } from './vocabularies.js';
+import type { Paginated } from './types.js';
 
 export const projectTypeSchema = z.enum(PROJECT_TYPES);
 export const projectStatusSchema = z.enum(PROJECT_STATUSES);
@@ -943,17 +1048,16 @@ export const relationDirectionSchema = z.enum(RELATION_DIRECTIONS);
 export const impactCategorySchema = z.enum(IMPACT_CATEGORIES);
 export const sortSchema = z.enum(TIMELINE_SORTS);
 
-const isoDate = z
-  .string()
-  .min(10)
-  .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
-
 // Every timestamp in this package goes through `isoDate`, including
 // `healthResponseSchema.time`. The columns behind the rest are `timestamptz`, so a
 // bare `z.string()` would let a malformed value cross the wire and surface later as
 // `NaN` from `new Date(...)` in the web timeline, far from the query that produced
 // it. `isoDate` is deliberately a floor, not a full ISO parser: it rejects the junk a
 // bad cast produces without trying to enumerate every legal ISO-8601 form.
+const isoDate = z
+  .string()
+  .min(10)
+  .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
 export const srcUrlSchema = z
   .string()
@@ -1063,7 +1167,16 @@ export const projectDetailSchema = projectSummarySchema.extend({
   geometrySource: z.enum(['project', 'location']),
 });
 
-const countMap = z.record(z.number().int().nonnegative());
+// A count map is keyed by a vocabulary, so the key set is part of the contract.
+// Without this, `byEvidence: { NOT_A_REAL_EVIDENCE_LEVEL: 7 }` parses, and the API can
+// emit a distribution nobody downstream knows how to read.
+function countMap(allowed: readonly string[]) {
+  return z
+    .record(z.number().int().nonnegative())
+    .refine((map) => Object.keys(map).every((key) => allowed.includes(key)), {
+      message: 'count map contains a key outside its vocabulary',
+    });
+}
 
 export const statsResponseSchema = z.object({
   totals: z.object({
@@ -1071,9 +1184,9 @@ export const statsResponseSchema = z.object({
     locations: z.number().int().nonnegative(),
     sources: z.number().int().nonnegative(),
   }),
-  byEvidence: countMap,
-  byType: countMap,
-  byStatus: countMap,
+  byEvidence: countMap(EVIDENCE_LEVELS),
+  byType: countMap(PROJECT_TYPES),
+  byStatus: countMap(PROJECT_STATUSES),
 });
 
 export const healthResponseSchema = z.object({
@@ -1093,7 +1206,7 @@ export const apiErrorSchema = z.object({
   }),
 });
 
-export function paginatedSchema<T extends z.ZodTypeAny>(item: T) {
+export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<T>> {
   return z.object({
     data: z.array(item),
     page: z.number().int().positive(),
@@ -1175,9 +1288,13 @@ export type * from './types.js';
 - [ ] **Step 9: Run all contract tests and typecheck**
 
 Run: `npx vitest run packages/contracts && npm run typecheck --workspace @atlas/contracts`
-Expected: PASS, 12 tests total across both files (3 vocabulary + 9 schema), and `tsc --noEmit` clean.
+Expected: PASS, 14 tests total across both files (4 vocabulary + 10 schema), and `tsc --noEmit` clean.
 
 A negative assertion over a hand-built fixture proves nothing unless the fixture itself is valid. `sourceType: 'LAW'` sat in an earlier draft of `validSource`; `LAW` is not in `SOURCE_TYPES`, so the fixture failed on the enum before the timestamp was ever evaluated and the test passed no matter what the schema did. That is why the last test above asserts the fixtures parse. When you add a negative test over a new fixture, add its positive twin in the same commit, or prove it with a mutation: revert the line under test and confirm the test goes red.
+
+The same trap has a second form, and it is easy to hit again. A rejection test only exercises the validator it reaches, and a short junk string reaches the *first* guard rather than the parser. `'someday'` is 7 characters, so `isoDate`'s `.min(10)` rejected it and `Date.parse` never ran; relaxing `.min(10)` to `.min(1)` left the suite green. Every negative timestamp assertion in this plan therefore uses a value at least 10 characters long, so the length floor is satisfied and the `refine` is what rejects it. If you add one, count the characters.
+
+A third form is an assertion that cannot fail. This file used to end with `expect(Object.keys(stats.byEvidence)).toEqual(['REPORTED', 'ANNOUNCED'])`, which read like a key-ordering contract. Zod's record echoes the input object's own insertion order, so the test was asserting the shape of its own fixture and would have passed under any implementation. It is replaced by `toEqual` on the map plus a test that an out-of-vocabulary key is rejected, which is the property the schema actually has. If a later task needs a specific key order out of `/api/stats`, it has to sort the result there and say so; nothing in this package promises an order.
 
 - [ ] **Step 10: Build the package so the apps can resolve it**
 
