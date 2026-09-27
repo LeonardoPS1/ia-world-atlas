@@ -25,6 +25,9 @@ describe('closed vocabularies', () => {
   });
 
   it('contains no duplicates', () => {
+    // The three tests in this file are not redundant with the pinning test below.
+    // If the pin fails, this one tells you whether a member was corrupted or the list
+    // merely reordered.
     for (const vocabulary of [
       PROJECT_TYPES,
       PROJECT_STATUSES,

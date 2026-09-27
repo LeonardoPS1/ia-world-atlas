@@ -182,7 +182,7 @@ export const apiErrorSchema = z.object({
   }),
 });
 
-export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<T>> {
+export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<z.infer<T>>> {
   return z.object({
     data: z.array(item),
     page: z.number().int().positive(),
