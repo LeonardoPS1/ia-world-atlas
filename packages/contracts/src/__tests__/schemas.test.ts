@@ -33,7 +33,7 @@ const validSource = {
   id: 'src-1',
   name: 'Ley 19.628',
   url: 'https://www.bcn.cl/leychile/navegar?idNorma=297746',
-  sourceType: 'LAW',
+  sourceType: 'GOVERNMENT',
   publicationDate: '2021-10-01T00:00:00.000Z',
   lastVerifiedAt: '2026-09-25T00:00:00.000Z',
   confidence: 'HIGH',
@@ -85,6 +85,12 @@ describe('wire schemas', () => {
     expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
     expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
     expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
+  });
+
+  it('accepts each of those fixtures unchanged, so the negative tests above are not vacuous', () => {
+    expect(sourceSchema.safeParse(validSource).success).toBe(true);
+    expect(statusHistoryEntrySchema.safeParse(validHistory).success).toBe(true);
+    expect(healthResponseSchema.safeParse(validHealth).success).toBe(true);
   });
 
   it('accepts https and http but rejects javascript and data protocols', () => {
