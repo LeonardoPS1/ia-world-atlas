@@ -1320,9 +1320,9 @@ git commit -m "feat(contracts): add closed vocabularies and wire schemas"
 ### Task 3: Final schema, migration runner, and removal of the legacy SQL
 
 **Files:**
-- Create: `apps/api/migrations/001_core.sql`, `apps/api/migrations/002_upgrade_v4.sql`, `apps/api/src/db/pool.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/migrate.test.ts`, `apps/api/src/db/types.ts`
+- Create: `apps/api/migrations/001_core.sql`, `apps/api/migrations/002_upgrade_v4.sql`, `apps/api/src/db/pool.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/migrate.test.ts`, `apps/api/src/db/types.ts`, `apps/api/src/db/schema-vocabularies.test.ts`
 - Delete: `apps/api/sql/001_schema.sql`, `apps/api/sql/002_seed.sql` (and the now-empty `apps/api/sql/` directory)
-- Modify: `docker-compose.yml`
+- Modify: `docker-compose.yml`, `apps/api/tsconfig.json`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks except the workspace.
@@ -1347,6 +1347,12 @@ function fakePool(applied: string[]) {
     async query(sql: string): Promise<QueryResultLike> {
       if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) {
         return { rows: applied.map((name) => ({ name })), rowCount: applied.length };
+      }
+      // Bookkeeping, not part of the transaction under test: runMigrations creates
+      // schema_migrations before the loop opens BEGIN, so recording it here would
+      // make `executed[0]` 'SQL' instead of 'BEGIN'.
+      if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
+        return { rows: [], rowCount: 0 };
       }
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
         executed.push(sql);
@@ -1827,14 +1833,116 @@ volumes:
 
 Note: the legacy compose file mounted `apps/api/sql` into `/docker-entrypoint-initdb.d`. That mount is deliberately removed — schema and data now come from `npm run db:setup`, which is versioned and re-runnable.
 
-- [ ] **Step 11: Verify the SQL parses against a scratch schema in CI-equivalent fashion**
+- [ ] **Step 11: Pin the SQL `CHECK` lists to the contract vocabularies**
+
+Task 2's review found the vocabularies unpinned: `LOCATION_LEVELS 'CONTINENT'→'PLANET'` and `SOURCE_TYPES 'MEDIA'→'BLOG'` both left the suite green. The consequence lands here — this file re-transcribes the same eight arrays into `check (... in (...))` lists, and a silent divergence between the two transcriptions is an `INSERT` that fails against Postgres at runtime, not a test failure.
+
+The two copies can be kept honest without a database by comparing them as text. Create `apps/api/src/db/schema-vocabularies.test.ts`:
+
+```ts
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import {
+  CONFIDENCE_LEVELS,
+  EVIDENCE_LEVELS,
+  IMPACT_CATEGORIES,
+  LOCATION_LEVELS,
+  PROJECT_STATUSES,
+  PROJECT_TYPES,
+  RELATION_TYPES,
+  SOURCE_TYPES,
+} from '@atlas/contracts';
+
+const sql = readFileSync(
+  fileURLToPath(new URL('../../../migrations/001_core.sql', import.meta.url)),
+  'utf8',
+);
+
+interface CheckList {
+  column: string;
+  values: string[];
+}
+
+// Every `check (<column> in ('A','B',...))` in the file. Order in the SQL carries
+// no meaning, so lists are compared as sets, but nothing is discarded.
+function checkLists(): CheckList[] {
+  return [...sql.matchAll(/check\s*\(\s*(\w+)\s+in\s*\(([^)]*)\)/gi)].map((match) => ({
+    column: match[1]!,
+    values: [...match[2]!.matchAll(/'([^']+)'/g)].map((value) => value[1]!).sort(),
+  }));
+}
+
+const sorted = (values: readonly string[]): string[] => [...values].sort();
+
+describe('001_core.sql vocabulary parity', () => {
+  it('mirrors every closed vocabulary as a check constraint', () => {
+    expect(checkLists()).toEqual(
+      [
+        { column: 'level', values: sorted(LOCATION_LEVELS) },
+        { column: 'source_type', values: sorted(SOURCE_TYPES) },
+        { column: 'confidence', values: sorted(CONFIDENCE_LEVELS) },
+        { column: 'type', values: sorted(PROJECT_TYPES) },
+        { column: 'status', values: sorted(PROJECT_STATUSES) },
+        { column: 'evidence', values: sorted(EVIDENCE_LEVELS) },
+        { column: 'from_status', values: sorted(PROJECT_STATUSES) },
+        { column: 'to_status', values: sorted(PROJECT_STATUSES) },
+        { column: 'category', values: sorted(IMPACT_CATEGORIES) },
+        { column: 'type', values: sorted(RELATION_TYPES) },
+      ].map((entry) => ({ ...entry, values: entry.values.sort() })),
+    );
+  });
+
+  it('finds no check list the table above does not account for', () => {
+    expect(checkLists()).toHaveLength(10);
+  });
+});
+```
+
+The second test is not redundant with the first. `toEqual` on an array is order-sensitive, so a tenth list appended in a different position would fail the first test with an opaque diff; the count assertion names the actual problem — a vocabulary was added to the SQL and not to the contract, or the reverse.
+
+Verify it can fail, because a parity test that passes for the wrong reason is the exact defect class this plan keeps hitting. Change `'CONTINENT'` to `'PLANET'` in the `check (level in (...))` list in `001_core.sql`, run the test, confirm red, then restore it and confirm green.
+
+Run: `npx vitest run --project api apps/api/src/db/schema-vocabularies.test.ts`
+Expected: PASS, 2 tests.
+
+- [ ] **Step 12: Keep the api test files out of the build output**
+
+This task writes the first `.ts` files ever added to `apps/api`, and the six `src/**/*.test.ts` files it introduces are all inside the build program. `apps/api/tsconfig.json` has `include: ["src/**/*.ts"]` and no `exclude`, and it emits to `./dist` — so `migrate.test.ts` and `schema-vocabularies.test.ts` would land in `dist/`, each one `import`-ing `vitest`, which is a devDependency absent from a production install. The build would not fail, which is what makes it worth closing here rather than discovering it in Task 22.
+
+The five files the plan puts in `apps/api/test/` are already outside the build program: they are not matched by `include`, and `tsconfig.test.json` is the config that sees them.
+
+Add an `exclude` to `apps/api/tsconfig.json`:
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/__fixtures__/**"]
+}
+```
+
+Then prove both halves, because the failure this prevents is silent:
+
+```bash
+rm -rf apps/api/dist && npm run build --workspace @atlas/api
+```
+
+Expected: `dist/db/migrate.js`, `dist/db/pool.js`, `dist/db/migrate.d.ts` present; `dist/db/migrate.test.js` absent; no `*.test.js` anywhere in `dist`; and `grep -r "vitest" apps/api/dist` finds nothing. Then run `npm run typecheck --workspace @atlas/api` and confirm it still covers the tests — `npx tsc -p apps/api/tsconfig.test.json --listFiles` must list `src/db/migrate.test.ts` and `src/db/schema-vocabularies.test.ts`. An `exclude` that fixed the build by removing the tests from typechecking is the same mistake Task 1 made in `packages/contracts`, in the opposite direction.
+
+- [ ] **Step 13: Verify the SQL parses against a scratch schema in CI-equivalent fashion**
 
 Docker is not installed on this machine, so the parse check must be deferred. Task 6 (PostgreSQL repositories) carries the integration test that runs `001_core.sql` against `TEST_DATABASE_URL` and fails loudly on any syntax error. Locally, run only the unit suite:
 
 Run: `npx vitest run --project api apps/api/src/db`
-Expected: PASS, 3 tests.
+Expected: PASS, 5 tests (3 in `migrate.test.ts`, 2 in `schema-vocabularies.test.ts`).
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
 git add -A
