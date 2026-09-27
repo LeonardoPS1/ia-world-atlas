@@ -829,7 +829,7 @@ const validSource = {
   id: 'src-1',
   name: 'Ley 19.628',
   url: 'https://www.bcn.cl/leychile/navegar?idNorma=297746',
-  sourceType: 'LAW',
+  sourceType: 'GOVERNMENT',
   publicationDate: '2021-10-01T00:00:00.000Z',
   lastVerifiedAt: '2026-09-25T00:00:00.000Z',
   confidence: 'HIGH',
@@ -881,6 +881,12 @@ describe('wire schemas', () => {
     expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
     expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
     expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
+  });
+
+  it('accepts each of those fixtures unchanged, so the negative tests above are not vacuous', () => {
+    expect(sourceSchema.safeParse(validSource).success).toBe(true);
+    expect(statusHistoryEntrySchema.safeParse(validHistory).success).toBe(true);
+    expect(healthResponseSchema.safeParse(validHealth).success).toBe(true);
   });
 
   it('accepts https and http but rejects javascript and data protocols', () => {
@@ -1169,7 +1175,9 @@ export type * from './types.js';
 - [ ] **Step 9: Run all contract tests and typecheck**
 
 Run: `npx vitest run packages/contracts && npm run typecheck --workspace @atlas/contracts`
-Expected: PASS, 11 tests total across both files (3 vocabulary + 8 schema), and `tsc --noEmit` clean.
+Expected: PASS, 12 tests total across both files (3 vocabulary + 9 schema), and `tsc --noEmit` clean.
+
+A negative assertion over a hand-built fixture proves nothing unless the fixture itself is valid. `sourceType: 'LAW'` sat in an earlier draft of `validSource`; `LAW` is not in `SOURCE_TYPES`, so the fixture failed on the enum before the timestamp was ever evaluated and the test passed no matter what the schema did. That is why the last test above asserts the fixtures parse. When you add a negative test over a new fixture, add its positive twin in the same commit, or prove it with a mutation: revert the line under test and confirm the test goes red.
 
 - [ ] **Step 10: Build the package so the apps can resolve it**
 
