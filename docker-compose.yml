@@ -1,15 +1,21 @@
 services:
-  postgres:
+  db:
     image: postgis/postgis:16-3.4
-    container_name: ai-world-atlas-postgis
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: aiworldatlas
-      POSTGRES_USER: atlas
-      POSTGRES_PASSWORD: atlas
-    ports: ["5432:5432"]
+      POSTGRES_DB: ${POSTGRES_DB:-aiworldatlas}
+      POSTGRES_USER: ${POSTGRES_USER:-atlas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
-      - atlas_pgdata:/var/lib/postgresql/data
-      - ./apps/api/sql:/docker-entrypoint-initdb.d:ro
+      - atlas-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atlas} -d ${POSTGRES_DB:-aiworldatlas}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
-  atlas_pgdata:
+  atlas-db-data:
