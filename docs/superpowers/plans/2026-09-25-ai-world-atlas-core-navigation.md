@@ -663,6 +663,9 @@ describe('closed vocabularies', () => {
   });
 
   it('contains no duplicates', () => {
+    // The three tests in this file are not redundant with the pinning test below.
+    // If the pin fails, this one tells you whether a member was corrupted or the list
+    // merely reordered.
     for (const vocabulary of [
       PROJECT_TYPES,
       PROJECT_STATUSES,
@@ -1206,7 +1209,7 @@ export const apiErrorSchema = z.object({
   }),
 });
 
-export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<T>> {
+export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Paginated<z.infer<T>>> {
   return z.object({
     data: z.array(item),
     page: z.number().int().positive(),
@@ -1295,6 +1298,8 @@ A negative assertion over a hand-built fixture proves nothing unless the fixture
 The same trap has a second form, and it is easy to hit again. A rejection test only exercises the validator it reaches, and a short junk string reaches the *first* guard rather than the parser. `'someday'` is 7 characters, so `isoDate`'s `.min(10)` rejected it and `Date.parse` never ran; relaxing `.min(10)` to `.min(1)` left the suite green. Every negative timestamp assertion in this plan therefore uses a value at least 10 characters long, so the length floor is satisfied and the `refine` is what rejects it. If you add one, count the characters.
 
 A third form is an assertion that cannot fail. This file used to end with `expect(Object.keys(stats.byEvidence)).toEqual(['REPORTED', 'ANNOUNCED'])`, which read like a key-ordering contract. Zod's record echoes the input object's own insertion order, so the test was asserting the shape of its own fixture and would have passed under any implementation. It is replaced by `toEqual` on the map plus a test that an out-of-vocabulary key is rejected, which is the property the schema actually has. If a later task needs a specific key order out of `/api/stats`, it has to sort the result there and say so; nothing in this package promises an order.
+
+One annotation in this step is a trap worth naming, because `tsc` cannot catch it. `paginatedSchema` takes a schema `T` and must return a schema of the *parsed* shape, so the return type is `z.ZodType<Paginated<z.infer<T>>>`. Writing `Paginated<T>` is satisfiable — the body really does return a schema that produces `Paginated<ZodObject<...>>` — so it typechecks clean and only fails at a call site that reads `data[0].id`. Nothing in this package calls it yet, so no gate here will ever see it. When you annotate a factory's return type against a generic interface, check which side of the schema/type split each type parameter sits on.
 
 - [ ] **Step 10: Build the package so the apps can resolve it**
 
