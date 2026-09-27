@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  healthResponseSchema,
   projectSummarySchema,
   srcUrlSchema,
   statsResponseSchema,
   projectTypeSchema,
+  sourceSchema,
+  statusHistoryEntrySchema,
 } from '../schemas.js';
 
 const validSummary = {
@@ -24,6 +27,35 @@ const validSummary = {
   lastVerifiedAt: '2026-09-25T00:00:00.000Z',
   sourceCount: 1,
   eventCount: 1,
+};
+
+const validSource = {
+  id: 'src-1',
+  name: 'Ley 19.628',
+  url: 'https://www.bcn.cl/leychile/navegar?idNorma=297746',
+  sourceType: 'LAW',
+  publicationDate: '2021-10-01T00:00:00.000Z',
+  lastVerifiedAt: '2026-09-25T00:00:00.000Z',
+  confidence: 'HIGH',
+  snippet: 'Texto oficial de la ley.',
+  isPrimary: true,
+};
+
+const validHistory = {
+  id: 1,
+  fromStatus: null,
+  toStatus: 'ACTIVE',
+  changedAt: '2021-10-01T00:00:00.000Z',
+  note: 'Publicación inicial.',
+  sourceId: 'src-1',
+};
+
+const validHealth = {
+  status: 'ok',
+  api: 'atlas-api',
+  database: 'up',
+  version: '0.1.0',
+  time: '2026-09-25T12:00:00.000Z',
 };
 
 describe('wire schemas', () => {
@@ -47,6 +79,12 @@ describe('wire schemas', () => {
 
   it('accepts a null publishedAt, because the column is nullable', () => {
     expect(projectSummarySchema.safeParse({ ...validSummary, publishedAt: null }).success).toBe(true);
+  });
+
+  it('validates timestamps on every schema that carries one', () => {
+    expect(sourceSchema.safeParse({ ...validSource, lastVerifiedAt: 'someday' }).success).toBe(false);
+    expect(statusHistoryEntrySchema.safeParse({ ...validHistory, changedAt: 'someday' }).success).toBe(false);
+    expect(healthResponseSchema.safeParse({ ...validHealth, time: 'someday' }).success).toBe(false);
   });
 
   it('accepts https and http but rejects javascript and data protocols', () => {

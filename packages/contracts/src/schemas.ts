@@ -28,12 +28,12 @@ const isoDate = z
   .min(10)
   .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'expected ISO-8601 date' });
 
-// Every timestamp in this package goes through `isoDate`. The columns behind
-// them are `timestamptz`, so a bare `z.string()` would let a malformed value
-// cross the wire and surface later as `NaN` from `new Date(...)` in the web
-// timeline, far from the query that produced it. `isoDate` is deliberately a
-// floor, not a full ISO parser: it rejects the junk a bad cast produces
-// without trying to enumerate every legal ISO-8601 form.
+// Every timestamp in this package goes through `isoDate`, including
+// `healthResponseSchema.time`. The columns behind the rest are `timestamptz`, so a
+// bare `z.string()` would let a malformed value cross the wire and surface later as
+// `NaN` from `new Date(...)` in the web timeline, far from the query that produced
+// it. `isoDate` is deliberately a floor, not a full ISO parser: it rejects the junk a
+// bad cast produces without trying to enumerate every legal ISO-8601 form.
 
 export const srcUrlSchema = z
   .string()
@@ -161,7 +161,7 @@ export const healthResponseSchema = z.object({
   api: z.literal('atlas-api'),
   database: z.enum(['up', 'down']),
   version: z.string().min(1),
-  time: z.string().min(1),
+  time: isoDate,
 });
 
 export const apiErrorSchema = z.object({
