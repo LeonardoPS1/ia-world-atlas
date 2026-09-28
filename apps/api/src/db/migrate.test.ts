@@ -49,7 +49,7 @@ function fakePool(applied: string[], failOn?: RegExp) {
 const PENDING = ['001_core.sql', '002_aaa.sql', '003_zzz.sql'];
 
 describe('runMigrations', () => {
-  it('applies every pending file in lexicographic order', async () => {
+  it('applies every pending file exactly once', async () => {
     const { pool, sqlOf } = fakePool([]);
     const applied = await runMigrations({ pool, migrationsDir });
     expect(applied).toEqual(PENDING);
@@ -135,6 +135,28 @@ describe('runMigrations', () => {
     await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(
       /^migration 001_core\.sql failed: syntax error at or near "SELCT"/,
     );
+  });
+
+  it('keeps the migration error when releasing the client also fails', async () => {
+    const { pool } = fakePool([], /fixture/);
+    const doubleReleasing: PoolLike = {
+      ...pool,
+      async connect() {
+        const client = await pool.connect();
+        return {
+          ...client,
+          release() {
+            throw new Error('Release called on client which has already been released to the pool.');
+          },
+        };
+      },
+    };
+    const error = await runMigrations({ pool: doubleReleasing, migrationsDir }).then(
+      () => null,
+      (caught: unknown) => caught as Error,
+    );
+    expect(error?.message).toMatch(/^migration 001_core\.sql failed: syntax error at or near "SELCT"/);
+    expect((error?.cause as Error | undefined)?.message).toBe('syntax error at or near "SELCT"');
   });
 
   it('preserves the original error as the cause of the migration failure', async () => {

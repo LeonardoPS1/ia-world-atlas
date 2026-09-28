@@ -68,7 +68,14 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
       }
       throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
     } finally {
-      client.release();
+      try {
+        client.release();
+      } catch {
+        // Best effort, same reasoning as ROLLBACK above: a throw from a finally
+        // block replaces the pending exception, and pg-pool's release() throws
+        // synchronously on a double release. Losing the migration error to a
+        // pool bookkeeping error is the worst possible outcome.
+      }
     }
   }
   return applied;
