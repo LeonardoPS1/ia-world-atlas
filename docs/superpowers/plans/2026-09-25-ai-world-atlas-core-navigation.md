@@ -88,7 +88,6 @@ ai-world-atlas/
 │  ├─ vitest.config.ts               NEW
 │  ├─ Dockerfile                     NEW   multi-stage, non-root, healthcheck
 │  ├─ migrations/001_core.sql        NEW   final idempotent schema
-│  ├─ migrations/002_upgrade_v4.sql  NEW   legacy V4 upgrade, no-op on a fresh database
 │  ├─ seeds/001_core_seed.sql        NEW   11 locations, 5 projects, ≥5 sources, ≥5 events, 0 relations
 │  ├─ src/
 │  │  ├─ app.ts                      NEW   buildApp(deps) → Express, mounts /api/health + /api
@@ -1320,102 +1319,181 @@ git commit -m "feat(contracts): add closed vocabularies and wire schemas"
 ### Task 3: Final schema, migration runner, and removal of the legacy SQL
 
 **Files:**
-- Create: `apps/api/migrations/001_core.sql`, `apps/api/migrations/002_upgrade_v4.sql`, `apps/api/src/db/pool.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/migrate.test.ts`, `apps/api/src/db/types.ts`, `apps/api/src/db/schema-vocabularies.test.ts`
+- Create: `apps/api/migrations/001_core.sql`, `apps/api/src/db/pool.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/migrate.test.ts`, `apps/api/src/db/types.ts`, `apps/api/src/db/schema-vocabularies.test.ts`
 - Delete: `apps/api/sql/001_schema.sql`, `apps/api/sql/002_seed.sql` (and the now-empty `apps/api/sql/` directory)
-- Modify: `docker-compose.yml`, `apps/api/tsconfig.json`
+- Modify: `docker-compose.yml`, `.env.example`, `apps/api/tsconfig.json`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks except the workspace.
 - Produces:
-  - `PoolLike` interface (`src/db/types.ts`): `query(sql: string, values?: unknown[]): Promise<QueryResultLike>` and `end(): Promise<void>`; `QueryResultLike` has `rows: unknown[]` and `rowCount: number | null`.
+  - `ClientLike` interface (`src/db/types.ts`): `query(sql: string, values?: unknown[]): Promise<QueryResultLike>` and `release(): void`.
+  - `PoolLike` interface (`src/db/types.ts`): `query(...)`, `connect(): Promise<ClientLike>`, `end(): Promise<void>`; `QueryResultLike` has `rows: unknown[]` and `rowCount: number | null`.
   - `createPool(connectionString: string): PoolLike` (`src/db/pool.ts`)
-  - `runMigrations(options: { pool: PoolLike; migrationsDir: string; log?: (message: string) => void }): Promise<string[]>` — returns names of applied migrations, sorted lexicographically, skipping already-applied ones.
+  - `runMigrations(options: { pool: PoolLike; migrationsDir: string; log?: (message: string) => void }): Promise<string[]>` — returns names of applied migrations, sorted lexicographically, skipping already-applied ones. Throws if `migrationsDir` contains no `.sql` file, and opens each migration on a single checked-out client so `BEGIN` and `COMMIT` reach the same connection.
   - `MIGRATIONS_TABLE` constant = `'schema_migrations'`.
   - Database tables: `locations`, `projects`, `sources`, `project_sources`, `status_history`, `impact_records`, `events`, `relations`.
+
+**There is no V4 upgrade migration.** An earlier draft of this task carried
+`002_upgrade_v4.sql`, an upgrade path from the discarded V4 prototype schema. It was cut on
+review: it was written against the *target* schema rather than the legacy one, so it
+referenced `relations.from_project` / `to_project` / `type` when the legacy table has
+`from_project_id` / `to_project_id` / `relation_type`, and it aborted on its first
+statement. It also never added the vocabulary `CHECK` constraints to a legacy database,
+never created `events.occurred_at`, and left `locations.level = 'LOCAL'` rows alive in a
+schema that forbids the value. Rather than repair a ~100-line migration that cannot be
+executed or tested on this machine, the V4 database is treated as a disposable dev
+artifact: `npm run db:reset` drops the volume and `db:setup` rebuilds from `001_core.sql`
+plus the audited seed. Task 4 adds that script.
 
 - [ ] **Step 1: Write the failing migration-runner test**
 
 `apps/api/src/db/migrate.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { MIGRATIONS_TABLE, runMigrations } from './migrate.js';
-import type { PoolLike, QueryResultLike } from './types.js';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
 
-function fakePool(applied: string[]) {
-  const executed: string[] = [];
+const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
+
+type Call = { sql: string; values?: unknown[]; via: 'pool' | 'client' };
+
+function fakePool(applied: string[], failOn?: RegExp) {
+  const calls: Call[] = [];
+  let released = 0;
+
+  const answer = async (sql: string): Promise<QueryResultLike> => {
+    if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) {
+      return { rows: applied.map((name) => ({ name })), rowCount: applied.length };
+    }
+    if (failOn?.test(sql)) throw new Error('syntax error at or near "SELCT"');
+    return { rows: [], rowCount: 0 };
+  };
+
   const pool: PoolLike = {
-    async query(sql: string): Promise<QueryResultLike> {
-      if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) {
-        return { rows: applied.map((name) => ({ name })), rowCount: applied.length };
-      }
-      // Bookkeeping, not part of the transaction under test: runMigrations creates
-      // schema_migrations before the loop opens BEGIN, so recording it here would
-      // make `executed[0]` 'SQL' instead of 'BEGIN'.
-      if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
-        return { rows: [], rowCount: 0 };
-      }
-      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
-        executed.push(sql);
-        return { rows: [], rowCount: 0 };
-      }
-      executed.push('SQL');
-      return { rows: [], rowCount: 0 };
+    async query(sql, values) {
+      calls.push({ sql, values, via: 'pool' });
+      return answer(sql);
+    },
+    async connect(): Promise<ClientLike> {
+      return {
+        async query(sql, values) {
+          calls.push({ sql, values, via: 'client' });
+          return answer(sql);
+        },
+        release() {
+          released += 1;
+        },
+      };
     },
     async end() {
       return undefined;
     },
   };
-  return { pool, executed };
+
+  const sqlOf = (via?: Call['via']) =>
+    calls.filter((c) => via === undefined || c.via === via).map((c) => c.sql);
+
+  return { pool, calls, sqlOf, releasedCount: () => released };
 }
 
-const migrationsDir = new URL('./__fixtures__/migrations', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const PENDING = ['001_core.sql', '002_aaa.sql', '003_zzz.sql'];
 
 describe('runMigrations', () => {
-  it('applies pending files in lexicographic order inside a transaction', async () => {
-    const { pool, executed } = fakePool([]);
+  it('applies every pending file in lexicographic order', async () => {
+    const { pool, sqlOf } = fakePool([]);
     const applied = await runMigrations({ pool, migrationsDir });
-    expect(applied).toEqual(['001_core.sql', '002_upgrade_v4.sql']);
-    expect(executed[0]).toBe('BEGIN');
-    expect(executed[executed.length - 1]).toBe('COMMIT');
+    expect(applied).toEqual(PENDING);
+    expect(sqlOf()).toEqual(
+      expect.arrayContaining([`create table if not exists ${MIGRATIONS_TABLE}`]),
+    );
+  });
+
+  it('records the migration file name in the bookkeeping table', async () => {
+    const { pool, calls } = fakePool([]);
+    await runMigrations({ pool, migrationsDir });
+    const inserts = calls.filter((c) => c.sql.includes(`insert into ${MIGRATIONS_TABLE}`));
+    expect(inserts.map((c) => c.values?.[0])).toEqual(PENDING);
+  });
+
+  it('runs BEGIN, the body and the bookkeeping insert on one checked-out client', async () => {
+    const { pool, sqlOf, releasedCount } = fakePool([]);
+    await runMigrations({ pool, migrationsDir });
+    // The migration body, the insert and the control statements must all travel on a
+    // single connection. Transaction state is per connection, so a BEGIN issued through
+    // pool#query can land somewhere else entirely and commit nothing.
+    expect(sqlOf('client')).toEqual([
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+    ]);
+    expect(releasedCount()).toBe(3);
   });
 
   it('skips migrations already recorded', async () => {
-    const { pool, executed } = fakePool(['001_core.sql', '002_upgrade_v4.sql']);
+    const { pool, sqlOf } = fakePool(PENDING);
     const applied = await runMigrations({ pool, migrationsDir });
     expect(applied).toEqual([]);
-    expect(executed).not.toContain('BEGIN');
+    expect(sqlOf()).not.toContain('BEGIN');
+  });
+
+  it('skips only the recorded ones and still applies the rest', async () => {
+    const { pool, sqlOf } = fakePool(['002_aaa.sql']);
+    const applied = await runMigrations({ pool, migrationsDir });
+    expect(applied).toEqual(['001_core.sql', '003_zzz.sql']);
+    expect(sqlOf('client').filter((s) => s === 'BEGIN')).toHaveLength(2);
   });
 
   it('rolls back and rethrows when a migration fails', async () => {
-    const seen: string[] = [];
-    const pool: PoolLike = {
-      async query(sql: string): Promise<QueryResultLike> {
-        seen.push(sql);
-        if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
-          return { rows: [], rowCount: 0 };
-        }
-        if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) return { rows: [], rowCount: 0 };
-        if (sql === 'BEGIN') return { rows: [], rowCount: 0 };
-        if (sql === 'ROLLBACK') return { rows: [], rowCount: 0 };
-        if (sql === 'COMMIT') return { rows: [], rowCount: 0 };
-        throw new Error('syntax error at or near "SELCT"');
-      },
-      async end() {
-        return undefined;
+    const { pool, sqlOf, releasedCount } = fakePool([], /fixture/);
+    await expect(runMigrations({ pool, migrationsDir })).rejects.toThrow(/SELCT/);
+    expect(sqlOf('client')).toContain('ROLLBACK');
+    expect(sqlOf('client')).not.toContain('COMMIT');
+    expect(releasedCount()).toBe(1);
+  });
+
+  it('keeps the migration error when the rollback itself fails', async () => {
+    const { pool } = fakePool([], /fixture/);
+    const failing: PoolLike = {
+      ...pool,
+      async connect() {
+        const client = await pool.connect();
+        return {
+          ...client,
+          async query(sql, values) {
+            if (sql === 'ROLLBACK') throw new Error('connection terminated');
+            return client.query(sql, values);
+          },
+        };
       },
     };
-    await expect(runMigrations({ pool, migrationsDir })).rejects.toThrow(/SELCT/);
-    // The bookkeeping query runs before the loop, so the fake must answer it or
-    // the throw happens before BEGIN and nothing is ever rolled back.
-    expect(seen).toContain('ROLLBACK');
-    expect(seen).not.toContain('COMMIT');
+    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(/SELCT/);
+  });
+
+  it('refuses to run against a directory with no migrations', async () => {
+    const { pool, sqlOf } = fakePool([]);
+    await expect(
+      runMigrations({ pool, migrationsDir: fileURLToPath(new URL('./__fixtures__/empty', import.meta.url)) }),
+    ).rejects.toThrow(/no \.sql migrations found/);
+    expect(sqlOf()).not.toContain('BEGIN');
   });
 });
 ```
 
-Create the two fixture files used by that test:
-- `apps/api/src/db/__fixtures__/migrations/001_core.sql` containing `-- fixture` and
-- `apps/api/src/db/__fixtures__/migrations/002_upgrade_v4.sql` containing `-- fixture`.
+Create the fixture files used by that test — three, so lexicographic order is actually
+exercised rather than being a property of a one-element list:
+- `apps/api/src/db/__fixtures__/migrations/001_core.sql`, `002_aaa.sql` and `003_zzz.sql`, each containing a comment line with the word `fixture`
+- an empty directory `apps/api/src/db/__fixtures__/empty/` (git does not track empty
+  directories, so add a `.gitkeep`)
 
 - [ ] **Step 2: Run it and confirm failure**
 
@@ -1431,8 +1509,19 @@ export interface QueryResultLike {
   rowCount: number | null;
 }
 
+/**
+ * A single checked-out connection. Transaction state lives on the connection,
+ * not on the pool, so anything that wraps several statements in BEGIN/COMMIT
+ * must hold one of these rather than calling PoolLike#query repeatedly.
+ */
+export interface ClientLike {
+  query(sql: string, values?: unknown[]): Promise<QueryResultLike>;
+  release(): void;
+}
+
 export interface PoolLike {
   query(sql: string, values?: unknown[]): Promise<QueryResultLike>;
+  connect(): Promise<ClientLike>;
   end(): Promise<void>;
 }
 ```
@@ -1467,6 +1556,10 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
     .filter((name) => name.endsWith('.sql'))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
+  if (files.length === 0) {
+    throw new Error(`no .sql migrations found in ${migrationsDir}`);
+  }
+
   await pool.query(CREATE_MIGRATIONS_TABLE);
   const appliedResult = await pool.query(SELECT_APPLIED);
   const alreadyApplied = new Set(
@@ -1479,25 +1572,44 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
       log(`skip ${file} (already applied)`);
       continue;
     }
-    const sql = await readFile(join(migrationsDir, file), 'utf8');
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      await pool.query(sql);
-      await pool.query(
-        `insert into ${MIGRATIONS_TABLE} (name) values ($1) on conflict do nothing`,
-        [file],
-      );
-      await pool.query('COMMIT');
-      applied.push(file);
-      log(`applied ${file}`);
-    } catch (error) {
-      await pool.query('ROLLBACK');
-      throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
+      const sql = await readFile(join(migrationsDir, file), 'utf8');
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query(
+          `insert into ${MIGRATIONS_TABLE} (name) values ($1) on conflict do nothing`,
+          [file],
+        );
+        await client.query('COMMIT');
+        applied.push(file);
+        log(`applied ${file}`);
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Best effort. A rollback that cannot be sent (pool exhausted, connection
+          // already aborted) must not replace the migration error, which is the one
+          // that tells the operator what actually went wrong.
+        }
+        throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
+      }
+    } finally {
+      client.release();
     }
   }
   return applied;
 }
 ```
+
+`pool.connect()` is load-bearing, not ceremony. `PoolLike#query` checks a connection
+out, runs one statement and returns it, so `BEGIN`, the migration body and the
+bookkeeping `insert` issued through it can each land on a different connection — and
+transaction state is per connection, so the `BEGIN` would be a no-op and the
+bookkeeping row would commit on its own. That is precisely the property the bookkeeping
+table exists to provide: a migration that crashes half way must leave no record, so the
+next run retries it. Through `PoolLike#query` that guarantee does not hold.
 
 - [ ] **Step 5: Implement `src/db/pool.ts`**
 
@@ -1507,14 +1619,13 @@ import pg from 'pg';
 import type { PoolLike } from './types.js';
 
 export function createPool(connectionString: string): PoolLike {
-  const pool = new pg.Pool({
+  return new pg.Pool({
     connectionString,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
     application_name: 'ai-world-atlas-api',
   });
-  return pool as unknown as PoolLike;
 }
 
 export async function closePool(pool: PoolLike): Promise<void> {
@@ -1525,7 +1636,7 @@ export async function closePool(pool: PoolLike): Promise<void> {
 - [ ] **Step 6: Run the runner test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/db/migrate.test.ts`
-Expected: PASS, 3 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 7: Write `migrations/001_core.sql`**
 
@@ -1692,121 +1803,7 @@ create trigger sources_touch before update on sources
   for each row execute function atlas_touch_updated_at();
 ```
 
-- [ ] **Step 8: Write `migrations/002_upgrade_v4.sql`**
-
-Every statement is guarded, so this file is a no-op on a database already created by `001_core.sql`, and an upgrade path for a legacy V4 database.
-
-`apps/api/migrations/002_upgrade_v4.sql`:
-```sql
--- Upgrade path from the legacy V4 schema (apps/api/sql/001_schema.sql + 002_seed.sql).
--- Every statement is guarded, so on a database produced by 001_core.sql this is a no-op.
-
-create extension if not exists postgis;
-
-create table if not exists sources (
-  id               text primary key,
-  name             text not null,
-  url              text not null check (url ~ '^https?://'),
-  source_type      text not null
-                     check (source_type in ('GOVERNMENT','UNIVERSITY','ORGANIZATION','COMPANY','PAPER','MEDIA','OTHER')),
-  publication_date date,
-  last_verified_at timestamptz not null,
-  confidence       text not null check (confidence in ('HIGH','MEDIUM','LOW')),
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
-);
-
-alter table locations add column if not exists country_code char(2);
-alter table locations add column if not exists metadata jsonb not null default '{}'::jsonb;
-alter table locations add column if not exists created_at timestamptz not null default now();
-alter table locations add column if not exists updated_at timestamptz not null default now();
-
-alter table projects add column if not exists sector text;
-alter table projects add column if not exists impact text;
-alter table projects add column if not exists tags text[] not null default '{}';
-alter table projects add column if not exists last_verified_at timestamptz not null default now();
-alter table projects add column if not exists created_at timestamptz not null default now();
-alter table projects add column if not exists updated_at timestamptz not null default now();
-
-create table if not exists project_sources (
-  project_id text not null references projects(id) on delete cascade,
-  source_id  text not null references sources(id) on delete restrict,
-  snippet    text not null,
-  is_primary boolean not null default false,
-  primary key (project_id, source_id)
-);
-
-create table if not exists status_history (
-  id          bigserial primary key,
-  project_id  text not null references projects(id) on delete cascade,
-  from_status text,
-  to_status   text not null,
-  changed_at  timestamptz not null,
-  note        text,
-  source_id   text references sources(id) on delete set null
-);
-
-create table if not exists impact_records (
-  id          bigserial primary key,
-  project_id  text not null references projects(id) on delete cascade,
-  category    text not null,
-  description text not null,
-  source_id   text references sources(id) on delete set null
-);
-
-alter table events add column if not exists kind text not null default 'DOCUMENTED';
-alter table events add column if not exists description text not null default '';
-alter table events add column if not exists source_id text references sources(id) on delete set null;
-
-alter table relations add column if not exists id text;
-alter table relations add column if not exists description text not null default '';
-alter table relations add column if not exists source_id text references sources(id) on delete set null;
-update relations set id = from_project || '->' || to_project || ':' || type where id is null;
-
--- The primary key is added only when the table has none. A fresh 001_core.sql already
--- creates relations with a primary key, so an unconditional `add constraint` would
--- abort the whole migration on a clean database instead of being a no-op.
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conrelid = 'relations'::regclass and contype = 'p'
-  ) then
-    execute 'alter table relations alter column id set not null';
-    execute 'alter table relations add constraint relations_pkey primary key (id)';
-  end if;
-end $$;
-
-create unique index if not exists relations_from_to_type_key
-  on relations (from_project, to_project, type);
-
--- Reject legacy rows that fall outside the closed vocabularies, and report the counts.
-do $$
-declare
-  dropped_type     integer;
-  dropped_status   integer;
-  dropped_evidence integer;
-begin
-  delete from projects where type not in (
-    'PROJECT','NEWS','LAUNCH','COMPANY','GOVERNMENT','UNIVERSITY','RESEARCH','INFRASTRUCTURE',
-    'ROBOTICS','POLICY','INVESTMENT','EDUCATION','APPLICATION','IMPACT','SIGNAL','POSSIBILITY');
-  get diagnostics dropped_type = row_count;
-
-  delete from projects where status not in (
-    'IDEA','RESEARCH','ANNOUNCED','FUNDED','PILOT','BUILDING','DEPLOYING','ACTIVE','SCALING',
-    'COMPLETED','PAUSED','CANCELLED');
-  get diagnostics dropped_status = row_count;
-
-  delete from projects where evidence not in (
-    'VERIFIED','REPORTED','ANNOUNCED','ANALYSIS','SIGNAL','POSSIBILITY');
-  get diagnostics dropped_evidence = row_count;
-
-  raise notice '002_upgrade_v4: dropped % projects with invalid type, % with invalid status, % with invalid evidence',
-    dropped_type, dropped_status, dropped_evidence;
-end;
-$$;
-```
-
-- [ ] **Step 9: Delete the legacy SQL**
+- [ ] **Step 8: Delete the legacy SQL**
 
 Run:
 ```bash
@@ -1814,7 +1811,7 @@ git rm -q apps/api/sql/001_schema.sql apps/api/sql/002_seed.sql
 ```
 Expected: both removed. The `apps/api/sql/` directory becomes empty and disappears from git.
 
-- [ ] **Step 10: Rewrite `docker-compose.yml`**
+- [ ] **Step 9: Rewrite `docker-compose.yml`**
 
 ```yaml
 services:
@@ -1841,6 +1838,33 @@ volumes:
 ```
 
 Note: the legacy compose file mounted `apps/api/sql` into `/docker-entrypoint-initdb.d`. That mount is deliberately removed — schema and data now come from `npm run db:setup`, which is versioned and re-runnable.
+
+`POSTGRES_PASSWORD` has no default on purpose, which makes the `.env.example` line below
+load-bearing: without it, step 1 of the README fails on a fresh clone with
+`POSTGRES_PASSWORD is required`. Anything a required variable needs in order to exist must
+ship a documented value.
+
+- [ ] **Step 10: Give the root `.env.example` the variable compose now requires**
+
+`.env.example`:
+```dotenv
+POSTGRES_DB=aiworldatlas
+POSTGRES_USER=atlas
+POSTGRES_PASSWORD=atlas
+DATABASE_URL=postgresql://atlas:atlas@127.0.0.1:5432/aiworldatlas
+VITE_API_BASE_URL=http://localhost:8787
+VITE_MAPBOX_TOKEN=
+```
+
+Then verify the guard actually resolves — the failure this prevents is invisible to a
+read of the file:
+
+```powershell
+Copy-Item .env.example .env -Force
+docker compose config | Out-Null
+```
+
+Expected: `docker compose config` exits 0. Remove the `.env` afterwards; it is gitignored.
 
 - [ ] **Step 11: Pin the SQL `CHECK` lists to the contract vocabularies**
 
