@@ -146,12 +146,13 @@ export const projectDetailSchema = projectSummarySchema.extend({
 // A count map is keyed by a vocabulary, so the key set is part of the contract.
 // Without this, `byEvidence: { NOT_A_REAL_EVIDENCE_LEVEL: 7 }` parses, and the API can
 // emit a distribution nobody downstream knows how to read.
-function countMap(allowed: readonly string[]) {
-  return z
-    .record(z.number().int().nonnegative())
-    .refine((map) => Object.keys(map).every((key) => allowed.includes(key)), {
-      message: 'count map contains a key outside its vocabulary',
-    });
+//
+// The key is enforced by a `z.enum` built from the vocabulary rather than by a
+// `refine` over `Object.keys`: the enum both rejects the key at runtime and keeps the
+// vocabulary in the inferred type, so `StatsResponse['byEvidence']` is keyed by the
+// evidence levels instead of by `string`. A refine could not do the second half.
+function countMap<Allowed extends readonly [string, ...string[]]>(allowed: Allowed) {
+  return z.record(z.enum(allowed), z.number().int().nonnegative());
 }
 
 export const statsResponseSchema = z.object({

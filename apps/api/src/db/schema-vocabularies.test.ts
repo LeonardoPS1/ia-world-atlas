@@ -22,13 +22,22 @@ interface CheckList {
   values: string[];
 }
 
-// Every `check (<column> in ('A','B',...))` in the file. Order in the SQL carries
-// no meaning, so lists are compared as sets, but nothing is discarded.
+// Every `check (<column> in ('A','B',...))` in the file.
+//
+// Two different kinds of ordering are in play, and only one of them is relaxed:
+//   - Within a single list, values are sorted, so reordering the members of a
+//     `check` does not fail. The SQL's member order carries no meaning.
+//   - The array of lists is NOT sorted: it is compared in the order the checks
+//     appear in the file. Moving a whole check up or down therefore fails the
+//     parity test with an opaque diff, which is what the count assertion in the
+//     second test exists to explain.
 //
 // The check body is captured whole (one level of nested parentheses, so the `in`
 // list is inside it) and then scanned for the list. A `check ( <column> in (`
 // pattern cannot reach `from_status`, which is written
-// `check (from_status is null or from_status in (...))`.
+// `check (from_status is null or from_status in (...))`. Scanning with `matchAll`
+// rather than a single non-global `exec` matters for the same reason: a body
+// holding more than one `in` list would otherwise report only the first.
 function checkLists(): CheckList[] {
   return [...sql.matchAll(/check\s*\(((?:[^()]|\([^()]*\))*)\)/gi)].flatMap((check) =>
     [...check[1]!.matchAll(/(\w+)\s+in\s*\(([^)]*)\)/gi)].map((match) => ({
