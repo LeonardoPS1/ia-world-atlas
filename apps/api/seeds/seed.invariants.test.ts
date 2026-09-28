@@ -54,6 +54,23 @@ describe('seed file invariants', () => {
     const damaged = [...seed].filter((ch) => /[\u3000-\u9FFF\uFFFD]/.test(ch));
     expect(damaged).toEqual([]);
   });
+
+  it('declares a geocode precision wherever it records an address', () => {
+    // A coordinate published without saying how it was obtained is the failure
+    // mode this whole seed is built to avoid: an address in the metadata reads as
+    // though someone geocoded it. Requiring the key wherever an address appears
+    // keeps the decision visible even when the value is only 'approximate'.
+    const rows = insertBlock('locations')
+      .split('\n')
+      .filter((line) => line.trim().startsWith("('"));
+    const withAddress = rows.filter((row) => row.includes('"address"'));
+    expect(withAddress.length).toBeGreaterThan(0);
+    for (const row of withAddress) {
+      expect(row, `location row with an address but no declared precision: ${row}`).toContain(
+        '"geocode_precision"',
+      );
+    }
+  });
 });
 
 describe('seed idempotency', () => {

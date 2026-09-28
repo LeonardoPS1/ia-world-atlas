@@ -2064,41 +2064,127 @@ git commit -m "feat(api): add versioned migrations and migration runner"
 - [ ] **Step 1: Write the failing seed-runner test**
 
 `apps/api/src/db/seed.test.ts`:
+
+The fake must model a **checked-out client**, not just a pool. A pool-only fake records
+BEGIN, the body and COMMIT into one list and passes whether they travelled on the same
+connection or three different ones, so it cannot catch the affinity defect that
+`runMigrations` was fixed for. Recording `via: 'pool' | 'client'` per call and asserting
+against the client list is the version of this test that fails when the runner regresses.
+
 ```ts
 import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { runSeed } from './seed.js';
-import type { PoolLike, QueryResultLike } from './types.js';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
 
-const seedFile = new URL('./__fixtures__/seed/001_core_seed.sql', import.meta.url)
-  .pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const seedFile = fileURLToPath(new URL('./__fixtures__/seed/001_core_seed.sql', import.meta.url));
 
-function recordingPool(failOn?: string) {
-  const statements: string[] = [];
+type Call = { sql: string; via: 'pool' | 'client' };
+
+function recordingPool(failOn?: RegExp) {
+  const calls: Call[] = [];
+  let released = 0;
+
+  const answer = async (sql: string): Promise<QueryResultLike> => {
+    if (failOn?.test(sql)) throw new Error('duplicate key violates unique constraint');
+    return { rows: [], rowCount: 0 };
+  };
+
   const pool: PoolLike = {
-    async query(sql: string): Promise<QueryResultLike> {
-      statements.push(sql);
-      if (failOn && sql.includes(failOn)) throw new Error('duplicate key violates unique constraint');
-      return { rows: [], rowCount: 0 };
+    async query(sql) {
+      calls.push({ sql, via: 'pool' });
+      return answer(sql);
+    },
+    async connect(): Promise<ClientLike> {
+      return {
+        async query(sql) {
+          calls.push({ sql, via: 'client' });
+          return answer(sql);
+        },
+        release() {
+          released += 1;
+        },
+      };
     },
     async end() {
       return undefined;
     },
   };
-  return { pool, statements };
+
+  const sqlOf = (via?: Call['via']) =>
+    calls.filter((c) => via === undefined || c.via === via).map((c) => c.sql);
+
+  return { pool, calls, sqlOf, releasedCount: () => released };
 }
 
 describe('runSeed', () => {
   it('wraps the seed file in a single transaction', async () => {
-    const { pool, statements } = recordingPool();
+    const { pool, sqlOf } = recordingPool();
     await runSeed({ pool, seedFile });
-    expect(statements[0]).toBe('BEGIN');
-    expect(statements[statements.length - 1]).toBe('COMMIT');
+    // BEGIN, the body and COMMIT must all travel on one checked-out connection.
+    expect(sqlOf('client')).toEqual([
+      'BEGIN',
+      expect.stringContaining('dummy_seed_probe'),
+      'COMMIT',
+    ]);
   });
 
-  it('rolls back and rethrows on failure', async () => {
-    const { pool, statements } = recordingPool('duplicate key');
+  it('releases the client after a successful seed', async () => {
+    const { pool, releasedCount } = recordingPool();
+    await runSeed({ pool, seedFile });
+    expect(releasedCount()).toBe(1);
+  });
+
+  it('rolls back and rethrows when the seed fails', async () => {
+    const { pool, sqlOf, releasedCount } = recordingPool(/dummy_seed_probe/);
     await expect(runSeed({ pool, seedFile })).rejects.toThrow(/duplicate key/);
-    expect(statements[statements.length - 1]).toBe('ROLLBACK');
+    expect(sqlOf('client')).toContain('ROLLBACK');
+    expect(sqlOf('client')).not.toContain('COMMIT');
+    expect(releasedCount()).toBe(1);
+  });
+
+  it('keeps the seed error when the rollback itself fails', async () => {
+    const { pool } = recordingPool(/dummy_seed_probe/);
+    const failingRollback: PoolLike = {
+      ...pool,
+      async connect() {
+        const client = await pool.connect();
+        return {
+          ...client,
+          async query(sql, values) {
+            if (sql === 'ROLLBACK') throw new Error('connection terminated');
+            return client.query(sql, values);
+          },
+        };
+      },
+    };
+    await expect(runSeed({ pool: failingRollback, seedFile })).rejects.toThrow(
+      /^seed failed: duplicate key violates unique constraint/,
+    );
+  });
+
+  it('keeps the seed error when releasing the client also fails', async () => {
+    const { pool } = recordingPool(/dummy_seed_probe/);
+    const doubleReleasing: PoolLike = {
+      ...pool,
+      async connect() {
+        const client = await pool.connect();
+        return {
+          ...client,
+          release() {
+            throw new Error('Release called on client which has already been released to the pool.');
+          },
+        };
+      },
+    };
+    const error = await runSeed({ pool: doubleReleasing, seedFile }).then(
+      () => null,
+      (caught: unknown) => caught as Error,
+    );
+    expect(error?.message).toMatch(/^seed failed: duplicate key violates unique constraint/);
+    expect((error?.cause as Error | undefined)?.message).toBe(
+      'duplicate key violates unique constraint',
+    );
   });
 });
 ```
@@ -2131,14 +2217,33 @@ export async function runSeed(options: RunSeedOptions): Promise<void> {
   const { pool, seedFile, log = () => {} } = options;
   const sql = await readFile(seedFile, 'utf8');
   log(`seeding ${seedFile}`);
-  await pool.query('BEGIN');
+
+  // One checked-out client for the whole transaction. Transaction state lives on
+  // the connection, so issuing BEGIN through pool#query and the body through a
+  // second checkout can put them on different connections, which leaves the seed
+  // running in autocommit and COMMIT with nothing to commit.
+  const client = await pool.connect();
   try {
-    await pool.query(sql);
-    await pool.query('COMMIT');
+    await client.query('BEGIN');
+    await client.query(sql);
+    await client.query('COMMIT');
     log('seed applied');
   } catch (error) {
-    await pool.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // Best effort. A rollback that cannot be sent must not replace the seed
+      // error, which is the one that tells the operator what actually went wrong.
+    }
     throw new Error(`seed failed: ${(error as Error).message}`, { cause: error });
+  } finally {
+    try {
+      client.release();
+    } catch {
+      // Best effort, same reasoning as ROLLBACK above: a throw from a finally
+      // block replaces the pending exception, and pg-pool's release() throws
+      // synchronously on a double release.
+    }
   }
 }
 ```
@@ -2150,7 +2255,7 @@ Expected: PASS, 2 tests.
 
 - [ ] **Step 5: Write `seeds/001_core_seed.sql`**
 
-Coordinates: named-city coordinates are the standard published centre of the city. The two non-city points are labelled approximations in `metadata`. `pucv-campus` is geocoded from the official address published by the source (Av. Brasil 525, Valparaíso) and carries `metadata.geocode_precision = 'address'`, never a fabricated precise coordinate. `eu` is an aggregation anchor for the AI Factories block, flagged with `metadata.aggregation = true`.
+Coordinates: named-city coordinates are the standard published centre of the city. The two non-city points are labelled approximations in `metadata`. `pucv-campus` carries `metadata.geocode_precision = 'approximate'`, **not** `'address'`: the address published by the faculty (Av. Brasil 525, Valparaíso) is recorded in the metadata as a label, but the coordinate was not geocoded from it and no geocoding service was consulted, so the point is a city-level anchor and must not be read as the building entrance. It was downgraded on Leonardo's decision rather than asserted, because a seed whose premise is traceability cannot carry a precision claim nobody checked. `projects.geometry` for `pucv-fondecyt-fuzzy` reuses that same approximate point. `eu` is an aggregation anchor for the AI Factories block, flagged with `metadata.aggregation = true`.
 
 `apps/api/seeds/001_core_seed.sql`:
 ```sql
@@ -2167,7 +2272,7 @@ insert into locations (id, name, level, parent_id, country_code, geography, meta
   ('valparaiso',     'Valparaíso',        'CITY',      'valparaiso-region','CL',st_setsrid(st_makepoint(-71.6127, -33.0472), 4326),'{}'::jsonb),
   ('vina-del-mar',   'Viña del Mar',      'CITY',      'valparaiso-region','CL',st_setsrid(st_makepoint(-71.5617, -33.0244), 4326),'{}'::jsonb),
   ('santiago',       'Santiago',         'CITY',      'chile',          'CL',  st_setsrid(st_makepoint(-70.6693, -33.4489), 4326),'{}'::jsonb),
-  ('pucv-campus',    'PUCV campus',      'LOCAL_AREA','valparaiso',     'CL',  st_setsrid(st_makepoint(-71.5220, -33.0365), 4326),'{"geocode_precision":"address","address":"Avenida Brasil 525, Valparaiso, Chile"}'),
+  ('pucv-campus',    'PUCV campus',      'LOCAL_AREA','valparaiso',     'CL',  st_setsrid(st_makepoint(-71.5220, -33.0365), 4326),'{"geocode_precision":"approximate","address":"Avenida Brasil 525, Valparaiso, Chile","note":"city-level anchor. The address is the one the faculty publishes, but this coordinate was NOT geocoded from it and no geocoding service was consulted, so the point is approximate and must not be read as the building entrance."}'),
   ('india',          'India',            'COUNTRY',   'world',          'IN',  st_setsrid(st_makepoint(78.9629, 20.5937), 4326),  '{}'::jsonb),
   ('singapore',      'Singapore',        'COUNTRY',   'world',          'SG',  st_setsrid(st_makepoint(103.8198, 1.3521), 4326),  '{}'::jsonb),
   ('eu',             'European Union',   'COUNTRY',   'world',          null,  st_setsrid(st_makepoint(10.35, 50.85), 4326),     '{"aggregation":true,"note":"anchor for the EU-wide AI Factories block, not a territorial claim"}')

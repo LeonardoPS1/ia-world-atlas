@@ -1,6 +1,15 @@
 -- AI World Atlas — audited seed.
 -- Every claim below is traceable to a primary source in `sources`.
 -- No VERIFIED evidence, no invented figures, no invented relations.
+--
+-- Coordinate policy. st_makepoint takes (longitude, latitude). Named places use
+-- the published centre of the city, which is a coarse but true statement. The
+-- one point that is NOT a published centre is pucv-campus: it carries
+-- geocode_precision 'approximate' and says in its metadata that the coordinate
+-- was not derived from the address by a geocoding service. It was downgraded
+-- from 'address' on review rather than asserted, because a seed whose whole
+-- premise is traceability cannot carry a precision claim nobody checked.
+-- projects.geometry for pucv-fondecyt-fuzzy reuses that same approximate point.
 
 -- ---------------------------------------------------------------- locations
 insert into locations (id, name, level, parent_id, country_code, geography, metadata) values
@@ -11,7 +20,7 @@ insert into locations (id, name, level, parent_id, country_code, geography, meta
   ('valparaiso',     'Valparaíso',        'CITY',      'valparaiso-region','CL',st_setsrid(st_makepoint(-71.6127, -33.0472), 4326),'{}'::jsonb),
   ('vina-del-mar',   'Viña del Mar',      'CITY',      'valparaiso-region','CL',st_setsrid(st_makepoint(-71.5617, -33.0244), 4326),'{}'::jsonb),
   ('santiago',       'Santiago',         'CITY',      'chile',          'CL',  st_setsrid(st_makepoint(-70.6693, -33.4489), 4326),'{}'::jsonb),
-  ('pucv-campus',    'PUCV campus',      'LOCAL_AREA','valparaiso',     'CL',  st_setsrid(st_makepoint(-71.5220, -33.0365), 4326), '{"geocode_precision":"address","address":"Avenida Brasil 525, Valparaiso, Chile"}'),
+  ('pucv-campus',    'PUCV campus',      'LOCAL_AREA','valparaiso',     'CL',  st_setsrid(st_makepoint(-71.5220, -33.0365), 4326), '{"geocode_precision":"approximate","address":"Avenida Brasil 525, Valparaiso, Chile","note":"city-level anchor. The address is the one the faculty publishes, but this coordinate was NOT geocoded from it and no geocoding service was consulted, so the point is approximate and must not be read as the building entrance."}'),
   ('india',          'India',            'COUNTRY',   'world',          'IN',  st_setsrid(st_makepoint(78.9629, 20.5937), 4326),  '{}'::jsonb),
   ('singapore',      'Singapore',        'COUNTRY',   'world',          'SG',  st_setsrid(st_makepoint(103.8198, 1.3521), 4326),  '{}'::jsonb),
   ('eu',             'European Union',   'COUNTRY',   'world',          null,  st_setsrid(st_makepoint(10.35, 50.85), 4326),     '{"aggregation":true,"note":"anchor for the EU-wide AI Factories block, not a territorial claim"}')
