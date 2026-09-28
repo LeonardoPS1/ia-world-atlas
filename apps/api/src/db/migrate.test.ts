@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { MIGRATIONS_TABLE, runMigrations } from './migrate.js';
+import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.js';
 import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
 
 const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
@@ -58,6 +58,11 @@ describe('runMigrations', () => {
         expect.stringContaining(`create table if not exists ${MIGRATIONS_TABLE}`),
       ]),
     );
+  });
+
+  it('orders migrations by name regardless of the order the filesystem reports them', () => {
+    const shuffled = ['003_zzz.sql', '001_core.sql', 'README.md', '002_aaa.sql'];
+    expect(sortMigrationFiles(shuffled)).toEqual(PENDING);
   });
 
   it('records the migration file name in the bookkeeping table', async () => {
@@ -127,7 +132,20 @@ describe('runMigrations', () => {
         };
       },
     };
-    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(/SELCT/);
+    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(
+      /^migration 001_core\.sql failed: syntax error at or near "SELCT"/,
+    );
+  });
+
+  it('preserves the original error as the cause of the migration failure', async () => {
+    const { pool } = fakePool([], /fixture/);
+    const error = await runMigrations({ pool, migrationsDir }).then(
+      () => null,
+      (caught: unknown) => caught as Error,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.cause).toBeInstanceOf(Error);
+    expect((error?.cause as Error).message).toBe('syntax error at or near "SELCT"');
   });
 
   it('refuses to run against a directory with no migrations', async () => {

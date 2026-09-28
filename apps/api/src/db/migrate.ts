@@ -18,11 +18,19 @@ export interface RunMigrationsOptions {
   log?: (message: string) => void;
 }
 
+// Exported so the ordering claim is testable without a filesystem. NTFS returns
+// readdir results in name order, so asserting that the files come back sorted
+// proves nothing: an implementation that never called .sort() would pass on
+// every machine this plan is likely to run on. Feeding this function a
+// deliberately shuffled array is the only version of the test that fails when
+// the sort is removed.
+export function sortMigrationFiles(names: string[]): string[] {
+  return names.filter((name) => name.endsWith('.sql')).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 export async function runMigrations(options: RunMigrationsOptions): Promise<string[]> {
   const { pool, migrationsDir, log = () => {} } = options;
-  const files = (await readdir(migrationsDir))
-    .filter((name) => name.endsWith('.sql'))
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const files = sortMigrationFiles(await readdir(migrationsDir));
 
   if (files.length === 0) {
     throw new Error(`no .sql migrations found in ${migrationsDir}`);
