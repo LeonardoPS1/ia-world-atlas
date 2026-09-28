@@ -12297,3 +12297,14 @@ Write the positive twin in the same commit, or mutate the line under test and co
 goes red. Task 2 shipped a `validSource` whose `sourceType` was not in `SOURCE_TYPES`, so the
 fixture failed on the enum before the timestamp was ever evaluated and the assertion passed
 against the exact defect it was written to catch.
+
+**The recurring failure of this project is a check that cannot fail but reports as passing.**
+Three separate instances so far, all in verification rather than in product code: the vacuous
+fixture above; a mutation experiment that matched a CRLF sequence against an LF file so the
+mutation never applied and the run looked clean; and a mutation harness whose `execFileSync`
+never spawned `npx` at all on Windows, whose unparseable baseline would have read as "every
+mutation survived" — a damning result that was actually a harness that never ran. The common
+shape is a check whose failure mode is silence. Any new verification step in this plan should
+be asked one question before it is trusted: **what does this report when it does not run?**
+A step that reports success, or a suspiciously total result, when it did not execute is worse
+than no step, because it converts an unknown into a false negative.
