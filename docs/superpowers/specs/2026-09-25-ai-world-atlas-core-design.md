@@ -308,7 +308,7 @@ Scripts raíz:
 ### 9.2 Archivos
 
 - `migrations/001_core.sql`: esquema final, idempotente, con vocabularios cerrados, fuentes, historial, impacto e índices. En una base vacía produce el estado objetivo completo.
-- `migrations/002_upgrade_v4.sql`: upgrade desde el esquema legacy V4 (`001_schema.sql` + `002_seed.sql`). En una base creada por `001_core.sql` es un no-op, porque todas las sentencias son `ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` / `DO $$ ... $$` con guardas de existencia. En una base legacy añade lo que falta, migra filas válidas y descarta sólo registros que violan los vocabuleros cerrados, reportando el conteo en el log del runner.
+- **No hay migración desde el esquema legacy V4.** Se evaluó escribir una y se descartó: el archivo resultante referenciaba columnas del esquema destino (`from_project`, `to_project`, `type`) en vez de las del legacy (`from_project_id`, `to_project_id`, `relation_type`), de modo que abortaba en su primera sentencia y nunca ejecutaba el resto. Tampoco agregaba los `CHECK` de vocabulario, ni creaba `events.occurred_at`, ni reparaba `locations.level`, que en el legacy incluye `'LOCAL'` y el vocabulario cerrado prohíbe. Sin datos de producción que preservar, una migración de un prototipo descartado es trabajo que no se escribiría en un proyecto real. `db:reset` destruye el volumen y reconstruye desde cero.
 - `seeds/001_core_seed.sql`: 11 locations, 5 projects, al menos 5 sources primarias, al menos 5 events documentales y 0 relations inventadas. Todas las inserciones son idempotentes (`ON CONFLICT DO UPDATE` sobre claves naturales) para que `db:seed` sea reejecutable.
 
 Las 11 locations del seed cubren los seis niveles del vocabulario:
@@ -611,7 +611,7 @@ Push a `origin/main` sólo después de:
 |---|---|
 | Mapbox sin token, cuota o WebGL2 | Fallback con diagnóstico, eventos registrados antes de `style.load`, timeout de estilo |
 | Datos de la conversación sin evidencia | Seed auditado contra fuentes primarias; claims excluidos explícitamente |
-| Cambios en volúmenes PostGIS existentes | Migración `002_upgrade_v4.sql` y `db:reset` documentado |
+| Cambios en volúmenes PostGIS existentes | `db:reset` documentado y verificado en CI; sin migración de schema, porque una base V4 se reconstruye en lugar de migrarse |
 | Clusters con filtros inconsistentes | Filtro server-side como fuente única; selector único y test específico |
 | E2E flaky con mapa real | Fixtures deterministas, waits explícitos y assertions de estado, no de pixels |
 | Falsa sensación de “verificado” | `VERIFIED` reservado a auditoría; stats con etiquetas de evidencia |

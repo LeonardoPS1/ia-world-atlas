@@ -1400,7 +1400,7 @@ function fakePool(applied: string[], failOn?: RegExp) {
 const PENDING = ['001_core.sql', '002_aaa.sql', '003_zzz.sql'];
 
 describe('runMigrations', () => {
-  it('applies every pending file in lexicographic order', async () => {
+  it('applies every pending file exactly once', async () => {
     const { pool, sqlOf } = fakePool([]);
     const applied = await runMigrations({ pool, migrationsDir });
     expect(applied).toEqual(PENDING);
@@ -1626,7 +1626,15 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
         throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
       }
     } finally {
-      client.release();
+      try {
+        client.release();
+      } catch {
+        // Best effort, same reasoning as ROLLBACK above: a throw from a finally
+        // block replaces the pending exception, and pg-pool's release() throws
+        // synchronously on a double release. Losing the migration error to a
+        // pool bookkeeping error is the worst possible outcome - the cause chain
+        // built above would be destroyed, not just the message.
+      }
     }
   }
   return applied;
