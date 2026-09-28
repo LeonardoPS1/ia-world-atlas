@@ -437,7 +437,7 @@ The `exclude` is load-bearing, not cosmetic. Without it this package emits `dist
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "seeds/**/*.ts"]
 }
 ```
 
@@ -1387,8 +1387,13 @@ describe('runMigrations', () => {
   });
 
   it('rolls back and rethrows when a migration fails', async () => {
+    const seen: string[] = [];
     const pool: PoolLike = {
       async query(sql: string): Promise<QueryResultLike> {
+        seen.push(sql);
+        if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
+          return { rows: [], rowCount: 0 };
+        }
         if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) return { rows: [], rowCount: 0 };
         if (sql === 'BEGIN') return { rows: [], rowCount: 0 };
         if (sql === 'ROLLBACK') return { rows: [], rowCount: 0 };
@@ -1400,6 +1405,10 @@ describe('runMigrations', () => {
       },
     };
     await expect(runMigrations({ pool, migrationsDir })).rejects.toThrow(/SELCT/);
+    // The bookkeeping query runs before the loop, so the fake must answer it or
+    // the throw happens before BEGIN and nothing is ever rolled back.
+    expect(seen).toContain('ROLLBACK');
+    expect(seen).not.toContain('COMMIT');
   });
 });
 ```
@@ -1855,7 +1864,7 @@ import {
 } from '@atlas/contracts';
 
 const sql = readFileSync(
-  fileURLToPath(new URL('../../../migrations/001_core.sql', import.meta.url)),
+  fileURLToPath(new URL('../../migrations/001_core.sql', import.meta.url)),
   'utf8',
 );
 
@@ -1866,11 +1875,33 @@ interface CheckList {
 
 // Every `check (<column> in ('A','B',...))` in the file. Order in the SQL carries
 // no meaning, so lists are compared as sets, but nothing is discarded.
+//
+// The column is not always the first token of the check body: `status_history`
+// uses `check (from_status is null or from_status in (...))`, so a pattern that
+// requires the column to lead the body misses it. Capture the whole body by
+// paren depth, then find the `in` list anywhere inside it.
+function checkBodies(): string[] {
+  const bodies: string[] = [];
+  for (const match of sql.matchAll(/check\s*\(/gi)) {
+    let depth = 1;
+    let index = match.index + match[0].length;
+    for (; index < sql.length && depth > 0; index += 1) {
+      if (sql[index] === '(') depth += 1;
+      else if (sql[index] === ')') depth -= 1;
+    }
+    if (depth === 0) bodies.push(sql.slice(match.index + match[0].length, index - 1));
+  }
+  return bodies;
+}
+
 function checkLists(): CheckList[] {
-  return [...sql.matchAll(/check\s*\(\s*(\w+)\s+in\s*\(([^)]*)\)/gi)].map((match) => ({
-    column: match[1]!,
-    values: [...match[2]!.matchAll(/'([^']+)'/g)].map((value) => value[1]!).sort(),
-  }));
+  return checkBodies()
+    .map((body) => /(\w+)\s+in\s*\(([^)]*)\)/i.exec(body))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => ({
+      column: match[1]!,
+      values: [...match[2]!.matchAll(/'([^']+)'/g)].map((value) => value[1]!).sort(),
+    }));
 }
 
 const sorted = (values: readonly string[]): string[] => [...values].sort();
@@ -2202,39 +2233,57 @@ on conflict (project_id, source_id) do update set
 -- ----------------------------------------------------------------- events
 -- kind 'DATED' means the exact day is documented by the source.
 -- kind 'YEAR'   means only the year is documented; the UI renders the year alone.
-insert into events (project_id, title, occurred_at, kind, description, source_id) values
-  ('pucv-fondecyt-fuzzy', 'Proyecto Fondecyt publicado por la Facultad de Ingenieria PUCV',
+-- The id is explicit so this insert upserts by primary key like every other
+-- table in this seed. A guessed unique key on (project_id, title, occurred_at)
+-- would be worse than a duplicate: two legitimately distinct events can share
+-- a title and a date, and the constraint would silently drop a real one.
+insert into events (id, project_id, title, occurred_at, kind, description, source_id) values
+  (1, 'pucv-fondecyt-fuzzy', 'Proyecto Fondecyt publicado por la Facultad de Ingenieria PUCV',
    date '2026-03-05', 'DATED',
    'La Facultad de Ingenieria de la PUCV publica el proyecto Fondecyt Regular sobre control difuso adaptativo.', 'src-pucv-fondecyt-2026'),
-  ('chile-national-ai-policy', 'Publicacion de la Politica Nacional de Inteligencia Artificial',
+  (2, 'chile-national-ai-policy', 'Publicacion de la Politica Nacional de Inteligencia Artificial',
    date '2021-01-01', 'YEAR',
    'Chile publica su Politica Nacional de Inteligencia Artificial, vigente desde 2021.', 'src-minciencia-policy'),
-  ('chile-national-ai-policy', 'Actualizacion con 177 acciones para 2026',
+  (3, 'chile-national-ai-policy', 'Actualizacion con 177 acciones para 2026',
    date '2026-01-01', 'YEAR',
    'La politica actualizada informa 177 acciones, 100 comprometidas para 2026 y coordinacion con 14 ministerios.', 'src-minciencia-policy-2026'),
-  ('indiaai-mission', 'Lanzamiento de tres Centres of Excellence',
+  (4, 'indiaai-mission', 'Lanzamiento de tres Centres of Excellence',
    date '2024-10-16', 'DATED',
    'El ministro Dharmendra Pradhan lanza tres Centres of Excellence con 990 crore rupias.', 'src-indiaai-coe-2024'),
-  ('indiaai-mission', 'IndiaAI Innovation Challenge 2026',
+  (5, 'indiaai-mission', 'IndiaAI Innovation Challenge 2026',
    date '2026-01-15', 'DATED',
    'Publicacion del reto de innovacion IndiaAI 2026.', 'src-indiaai-challenge-2026'),
-  ('punggol-digital-district', 'Open Digital Platform descrito como sistema de smart city',
+  (6, 'punggol-digital-district', 'Open Digital Platform descrito como sistema de smart city',
    date '2026-01-01', 'YEAR',
    'Smart Nation describe el Open Digital Platform del Punggol Digital District como integracion de sistemas de smart city.', 'src-smartnation-odp'),
-  ('eu-ai-factories', 'Red de AI Factories en preparacion',
+  (7, 'eu-ai-factories', 'Red de AI Factories en preparacion',
    date '2026-01-01', 'YEAR',
-   'La Comision Europea reporta 19 AI Factories y 13 antennas en preparacion y una llamada para hasta 7 AI Gigafactories.', 'src-ec-ai-factories');
+   'La Comision Europea reporta 19 AI Factories y 13 antennas en preparacion y una llamada para hasta 7 AI Gigafactories.', 'src-ec-ai-factories')
+on conflict (id) do update set
+  project_id = excluded.project_id,
+  title = excluded.title,
+  occurred_at = excluded.occurred_at,
+  kind = excluded.kind,
+  description = excluded.description,
+  source_id = excluded.source_id;
 
 -- ---------------------------------------------------------- status history
-insert into status_history (project_id, from_status, to_status, changed_at, note, source_id) values
-  ('pucv-fondecyt-fuzzy', NULL, 'RESEARCH', timestamptz '2026-03-05T00:00:00Z', 'Inicio documentado del proyecto.', 'src-pucv-fondecyt-2026'),
-  ('chile-national-ai-policy', NULL, 'ANNOUNCED', timestamptz '2021-01-01T00:00:00Z', 'Publicacion de la politica.', 'src-minciencia-policy'),
-  ('chile-national-ai-policy', 'ANNOUNCED', 'ACTIVE', timestamptz '2026-01-01T00:00:00Z', 'Politica vigente con plan de accion en ejecucion.', 'src-minciencia-policy-2026'),
-  ('indiaai-mission', NULL, 'ANNOUNCED', timestamptz '2024-10-16T00:00:00Z', 'Lanzamiento de los Centres of Excellence.', 'src-indiaai-coe-2024'),
-  ('indiaai-mission', 'ANNOUNCED', 'ACTIVE', timestamptz '2026-01-15T00:00:00Z', 'Reto de innovacion 2026 en curso.', 'src-indiaai-challenge-2026'),
-  ('punggol-digital-district', NULL, 'ACTIVE', timestamptz '2026-01-01T00:00:00Z', 'Plataforma descrita como operativa.', 'src-smartnation-odp'),
-  ('eu-ai-factories', NULL, 'ANNOUNCED', timestamptz '2026-01-01T00:00:00Z', 'Red anunciada por la Comision Europea.', 'src-ec-ai-factories'),
-  ('eu-ai-factories', 'ANNOUNCED', 'DEPLOYING', timestamptz '2026-01-01T00:00:00Z', 'Factories y antennas en preparacion.', 'src-ec-ai-factories');
+insert into status_history (id, project_id, from_status, to_status, changed_at, note, source_id) values
+  (1, 'pucv-fondecyt-fuzzy', NULL, 'RESEARCH', timestamptz '2026-03-05T00:00:00Z', 'Inicio documentado del proyecto.', 'src-pucv-fondecyt-2026'),
+  (2, 'chile-national-ai-policy', NULL, 'ANNOUNCED', timestamptz '2021-01-01T00:00:00Z', 'Publicacion de la politica.', 'src-minciencia-policy'),
+  (3, 'chile-national-ai-policy', 'ANNOUNCED', 'ACTIVE', timestamptz '2026-01-01T00:00:00Z', 'Politica vigente con plan de accion en ejecucion.', 'src-minciencia-policy-2026'),
+  (4, 'indiaai-mission', NULL, 'ANNOUNCED', timestamptz '2024-10-16T00:00:00Z', 'Lanzamiento de los Centres of Excellence.', 'src-indiaai-coe-2024'),
+  (5, 'indiaai-mission', 'ANNOUNCED', 'ACTIVE', timestamptz '2026-01-15T00:00:00Z', 'Reto de innovacion 2026 en curso.', 'src-indiaai-challenge-2026'),
+  (6, 'punggol-digital-district', NULL, 'ACTIVE', timestamptz '2026-01-01T00:00:00Z', 'Plataforma descrita como operativa.', 'src-smartnation-odp'),
+  (7, 'eu-ai-factories', NULL, 'ANNOUNCED', timestamptz '2026-01-01T00:00:00Z', 'Red anunciada por la Comision Europea.', 'src-ec-ai-factories'),
+  (8, 'eu-ai-factories', 'ANNOUNCED', 'DEPLOYING', timestamptz '2026-01-01T00:00:00Z', 'Factories y antennas en preparacion.', 'src-ec-ai-factories')
+on conflict (id) do update set
+  project_id = excluded.project_id,
+  from_status = excluded.from_status,
+  to_status = excluded.to_status,
+  changed_at = excluded.changed_at,
+  note = excluded.note,
+  source_id = excluded.source_id;
 
 -- relations: intentionally empty. The audited sources do not document an
 -- explicit relation between these five projects, so none is invented.
@@ -2250,10 +2299,32 @@ Run:
 $seed = Get-Content "apps\api\seeds\001_core_seed.sql" -Raw
 $hits = [regex]::Matches($seed, '[\u3000-\u9FFF\uFFFD]')
 if ($hits.Count -gt 0) { Write-Output "CJK/MOJIBAKE HITS: $($hits.Count)"; exit 1 }
-if ($seed -notmatch "on conflict \(id\) do update set") { Write-Output 'NOT IDEMPOTENT'; exit 1 }
+$targets = @{
+  'projects'         = 'id'
+  'locations'        = 'id'
+  'project_sources'  = 'project_id, source_id'
+  'events'           = 'id'
+  'status_history'   = 'id'
+}
+foreach ($table in $targets.Keys) {
+  $at = $seed.IndexOf("insert into $table ")
+  if ($at -lt 0) { Write-Output "MISSING INSERT: $table"; exit 1 }
+  $next = $seed.IndexOf('insert into ', $at + 1)
+  if ($next -lt 0) { $next = $seed.Length }
+  $slice = $seed.Substring($at, $next - $at)
+  if ($slice -notmatch "on conflict \($($targets[$table])\) do update set") {
+    Write-Output "NOT IDEMPOTENT: $table"; exit 1
+  }
+}
 Write-Output 'seed clean'
 ```
-Expected: `seed clean`. If it fails, fix the flagged text with the edit tool and re-run until it prints `seed clean`.
+Expected: `seed clean`. If it fails, fix the flagged table with the edit tool and re-run until it prints `seed clean`.
+
+Two things this has to get right. A single `-notmatch` over the whole file is not enough: it
+matches whichever table happens to be first, so deleting the `events` insert entirely still reports
+the seed clean. Each table is checked in its own slice, bounded by the next `insert into`. And the
+conflict target differs per table: `project_sources` is a join table with `primary key (project_id,
+source_id)` and no `id` column at all, so asserting `(id)` for every table is simply wrong.
 
 - [ ] **Step 7: Assert the seed invariants**
 
@@ -2294,8 +2365,13 @@ describe('seed file invariants', () => {
 
 - [ ] **Step 8: Run the seed tests**
 
-Run: `npx vitest run --project api apps/api/src/db`
-Expected: PASS, 3 files / 8 tests.
+Run: `npx vitest run --project api apps/api/src/db apps/api/seeds`
+Expected: PASS, 4 files / 12 tests.
+
+Both path filters are required. The vitest file filter is a substring match on the path, so
+`apps/api/src/db` alone does not pick up `apps/api/seeds/seed.invariants.test.ts` — the five
+invariant tests this step just wrote would be silently skipped while the command still printed a
+pass. Confirm the file count, not just the exit code.
 
 - [ ] **Step 9: Add the `db:reset` script and document it**
 
