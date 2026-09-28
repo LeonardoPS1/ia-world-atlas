@@ -1351,7 +1351,7 @@ plus the audited seed. Task 4 adds that script.
 ```ts
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { MIGRATIONS_TABLE, runMigrations } from './migrate.js';
+import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.js';
 import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
 
 const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
@@ -1405,8 +1405,15 @@ describe('runMigrations', () => {
     const applied = await runMigrations({ pool, migrationsDir });
     expect(applied).toEqual(PENDING);
     expect(sqlOf()).toEqual(
-      expect.arrayContaining([`create table if not exists ${MIGRATIONS_TABLE}`]),
+      expect.arrayContaining([
+        expect.stringContaining(`create table if not exists ${MIGRATIONS_TABLE}`),
+      ]),
     );
+  });
+
+  it('orders migrations by name regardless of the order the filesystem reports them', () => {
+    const shuffled = ['003_zzz.sql', '001_core.sql', 'README.md', '002_aaa.sql'];
+    expect(sortMigrationFiles(shuffled)).toEqual(PENDING);
   });
 
   it('records the migration file name in the bookkeeping table', async () => {
@@ -1476,7 +1483,20 @@ describe('runMigrations', () => {
         };
       },
     };
-    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(/SELCT/);
+    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(
+      /^migration 001_core\.sql failed: syntax error at or near "SELCT"/,
+    );
+  });
+
+  it('preserves the original error as the cause of the migration failure', async () => {
+    const { pool } = fakePool([], /fixture/);
+    const error = await runMigrations({ pool, migrationsDir }).then(
+      () => null,
+      (caught: unknown) => caught as Error,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.cause).toBeInstanceOf(Error);
+    expect((error?.cause as Error).message).toBe('syntax error at or near "SELCT"');
   });
 
   it('refuses to run against a directory with no migrations', async () => {
@@ -1550,11 +1570,21 @@ export interface RunMigrationsOptions {
   log?: (message: string) => void;
 }
 
-export async function runMigrations(options: RunMigrationsOptions): Promise<string[]> {
-  const { pool, migrationsDir, log = () => {} } = options;
-  const files = (await readdir(migrationsDir))
+// Exported so the ordering claim is testable without a filesystem. NTFS returns
+// readdir results in name order, so asserting that the files come back sorted
+// proves nothing: an implementation that never called .sort() would pass on
+// every machine this plan is likely to run on. Feeding this function a
+// deliberately shuffled array is the only version of the test that fails when
+// the sort is removed.
+export function sortMigrationFiles(names: string[]): string[] {
+  return names
     .filter((name) => name.endsWith('.sql'))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+export async function runMigrations(options: RunMigrationsOptions): Promise<string[]> {
+  const { pool, migrationsDir, log = () => {} } = options;
+  const files = sortMigrationFiles(await readdir(migrationsDir));
 
   if (files.length === 0) {
     throw new Error(`no .sql migrations found in ${migrationsDir}`);
@@ -1636,7 +1666,13 @@ export async function closePool(pool: PoolLike): Promise<void> {
 - [ ] **Step 6: Run the runner test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/db/migrate.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 10 tests.
+
+Two of these tests exist because of mutation runs against the previous version of this suite, and both are worth reading before you change either assertion.
+
+`keeps the migration error when the rollback itself fails` pins the **file name** in the regex, not the SQL error. The wrapper is `migration ${file} failed: ${error.message}`, so the original error text is interpolated into the wrapper's own message; an assertion of the form `rejects.toThrow(/SELCT/)` therefore passes whether or not the wrapper exists, because the unwrapped error carries the same text. The file name is the only part of the message that the wrapper alone knows, so it is the only thing that distinguishes the two. `preserves the original error as the cause` covers the other half: `cause` is set, and it is the original error object rather than a string.
+
+`orders migrations by name regardless of the order the filesystem reports them` exists because the ordering test above it proved nothing. NTFS returns `readdir` results in name order, so `expect(applied).toEqual(PENDING)` passes even if `.sort()` is deleted - and the fixture names, while they do bracket `core` correctly against a naive sort of the descriptive part, do not distinguish "sorted" from "already sorted". Removing the `.sort()` call was one of only two mutations to survive the rewritten suite. The fix is the extracted `sortMigrationFiles` and a deliberately shuffled input.
 
 - [ ] **Step 7: Write `migrations/001_core.sql`**
 
@@ -1963,9 +1999,9 @@ Expected: PASS, 2 tests.
 
 - [ ] **Step 12: Keep the api test files out of the build output**
 
-This task writes the first `.ts` files ever added to `apps/api`, and the six `src/**/*.test.ts` files it introduces are all inside the build program. `apps/api/tsconfig.json` has `include: ["src/**/*.ts"]` and no `exclude`, and it emits to `./dist` — so `migrate.test.ts` and `schema-vocabularies.test.ts` would land in `dist/`, each one `import`-ing `vitest`, which is a devDependency absent from a production install. The build would not fail, which is what makes it worth closing here rather than discovering it in Task 22.
+This task writes the first `.ts` files ever added to `apps/api`, and the two `src/**/*.test.ts` files it introduces are both inside the build program. `apps/api/tsconfig.json` has `include: ["src/**/*.ts"]` and no `exclude`, and it emits to `./dist` — so `migrate.test.ts` and `schema-vocabularies.test.ts` would land in `dist/`, each one `import`-ing `vitest`, which is a devDependency absent from a production install. The build would not fail, which is what makes it worth closing here rather than discovering it in Task 22.
 
-The five files the plan puts in `apps/api/test/` are already outside the build program: they are not matched by `include`, and `tsconfig.test.json` is the config that sees them.
+The five files a later task puts in `apps/api/test/` are already outside this build program: they are not matched by `include`, and `tsconfig.test.json` is the config that sees them.
 
 Add an `exclude` to `apps/api/tsconfig.json`:
 
