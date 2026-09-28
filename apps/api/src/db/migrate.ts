@@ -24,11 +24,13 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
     .filter((name) => name.endsWith('.sql'))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
+  if (files.length === 0) {
+    throw new Error(`no .sql migrations found in ${migrationsDir}`);
+  }
+
   await pool.query(CREATE_MIGRATIONS_TABLE);
   const appliedResult = await pool.query(SELECT_APPLIED);
-  const alreadyApplied = new Set(
-    appliedResult.rows.map((row) => (row as { name: string }).name),
-  );
+  const alreadyApplied = new Set(appliedResult.rows.map((row) => (row as { name: string }).name));
 
   const applied: string[] = [];
   for (const file of files) {
@@ -36,20 +38,29 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<stri
       log(`skip ${file} (already applied)`);
       continue;
     }
-    const sql = await readFile(join(migrationsDir, file), 'utf8');
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      await pool.query(sql);
-      await pool.query(
+      const sql = await readFile(join(migrationsDir, file), 'utf8');
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query(
         `insert into ${MIGRATIONS_TABLE} (name) values ($1) on conflict do nothing`,
         [file],
       );
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
       applied.push(file);
       log(`applied ${file}`);
     } catch (error) {
-      await pool.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Best effort. A rollback that cannot be sent (pool exhausted, connection
+        // already aborted) must not replace the migration error, which is the one
+        // that tells the operator what actually went wrong.
+      }
       throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
+    } finally {
+      client.release();
     }
   }
   return applied;

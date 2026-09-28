@@ -1,75 +1,143 @@
 import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { MIGRATIONS_TABLE, runMigrations } from './migrate.js';
-import type { PoolLike, QueryResultLike } from './types.js';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
 
-function fakePool(applied: string[]) {
-  const executed: string[] = [];
+const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
+
+type Call = { sql: string; values?: unknown[]; via: 'pool' | 'client' };
+
+function fakePool(applied: string[], failOn?: RegExp) {
+  const calls: Call[] = [];
+  let released = 0;
+
+  const answer = async (sql: string): Promise<QueryResultLike> => {
+    if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) {
+      return { rows: applied.map((name) => ({ name })), rowCount: applied.length };
+    }
+    if (failOn?.test(sql)) throw new Error('syntax error at or near "SELCT"');
+    return { rows: [], rowCount: 0 };
+  };
+
   const pool: PoolLike = {
-    async query(sql: string): Promise<QueryResultLike> {
-      if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) {
-        return { rows: applied.map((name) => ({ name })), rowCount: applied.length };
-      }
-      // Bookkeeping, not part of the transaction under test: runMigrations creates
-      // schema_migrations before the loop opens BEGIN, so recording it here would
-      // make `executed[0]` 'SQL' instead of 'BEGIN'.
-      if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
-        return { rows: [], rowCount: 0 };
-      }
-      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
-        executed.push(sql);
-        return { rows: [], rowCount: 0 };
-      }
-      executed.push('SQL');
-      return { rows: [], rowCount: 0 };
+    async query(sql, values) {
+      calls.push({ sql, values, via: 'pool' });
+      return answer(sql);
+    },
+    async connect(): Promise<ClientLike> {
+      return {
+        async query(sql, values) {
+          calls.push({ sql, values, via: 'client' });
+          return answer(sql);
+        },
+        release() {
+          released += 1;
+        },
+      };
     },
     async end() {
       return undefined;
     },
   };
-  return { pool, executed };
+
+  const sqlOf = (via?: Call['via']) =>
+    calls.filter((c) => via === undefined || c.via === via).map((c) => c.sql);
+
+  return { pool, calls, sqlOf, releasedCount: () => released };
 }
 
-const migrationsDir = new URL('./__fixtures__/migrations', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const PENDING = ['001_core.sql', '002_aaa.sql', '003_zzz.sql'];
 
 describe('runMigrations', () => {
-  it('applies pending files in lexicographic order inside a transaction', async () => {
-    const { pool, executed } = fakePool([]);
+  it('applies every pending file in lexicographic order', async () => {
+    const { pool, sqlOf } = fakePool([]);
     const applied = await runMigrations({ pool, migrationsDir });
-    expect(applied).toEqual(['001_core.sql', '002_upgrade_v4.sql']);
-    expect(executed[0]).toBe('BEGIN');
-    expect(executed[executed.length - 1]).toBe('COMMIT');
+    expect(applied).toEqual(PENDING);
+    expect(sqlOf()).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`create table if not exists ${MIGRATIONS_TABLE}`),
+      ]),
+    );
+  });
+
+  it('records the migration file name in the bookkeeping table', async () => {
+    const { pool, calls } = fakePool([]);
+    await runMigrations({ pool, migrationsDir });
+    const inserts = calls.filter((c) => c.sql.includes(`insert into ${MIGRATIONS_TABLE}`));
+    expect(inserts.map((c) => c.values?.[0])).toEqual(PENDING);
+  });
+
+  it('runs BEGIN, the body and the bookkeeping insert on one checked-out client', async () => {
+    const { pool, sqlOf, releasedCount } = fakePool([]);
+    await runMigrations({ pool, migrationsDir });
+    // The migration body, the insert and the control statements must all travel on a
+    // single connection. Transaction state is per connection, so a BEGIN issued through
+    // pool#query can land somewhere else entirely and commit nothing.
+    expect(sqlOf('client')).toEqual([
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+      'BEGIN',
+      expect.stringContaining('fixture'),
+      expect.stringContaining(`insert into ${MIGRATIONS_TABLE}`),
+      'COMMIT',
+    ]);
+    expect(releasedCount()).toBe(3);
   });
 
   it('skips migrations already recorded', async () => {
-    const { pool, executed } = fakePool(['001_core.sql', '002_upgrade_v4.sql']);
+    const { pool, sqlOf } = fakePool(PENDING);
     const applied = await runMigrations({ pool, migrationsDir });
     expect(applied).toEqual([]);
-    expect(executed).not.toContain('BEGIN');
+    expect(sqlOf()).not.toContain('BEGIN');
+  });
+
+  it('skips only the recorded ones and still applies the rest', async () => {
+    const { pool, sqlOf } = fakePool(['002_aaa.sql']);
+    const applied = await runMigrations({ pool, migrationsDir });
+    expect(applied).toEqual(['001_core.sql', '003_zzz.sql']);
+    expect(sqlOf('client').filter((s) => s === 'BEGIN')).toHaveLength(2);
   });
 
   it('rolls back and rethrows when a migration fails', async () => {
-    const seen: string[] = [];
-    const pool: PoolLike = {
-      async query(sql: string): Promise<QueryResultLike> {
-        if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
-          seen.push(sql);
-          return { rows: [], rowCount: 0 };
-        }
-        if (sql.includes(`select name from ${MIGRATIONS_TABLE}`)) return { rows: [], rowCount: 0 };
-        // Same bookkeeping as fakePool: without this the throw fires on
-        // CREATE_MIGRATIONS_TABLE, which runs before the loop opens BEGIN, so the
-        // test would pass without ever opening or rolling back a transaction.
-        if (sql.includes(`create table if not exists ${MIGRATIONS_TABLE}`)) {
-          return { rows: [], rowCount: 0 };
-        }
-        throw new Error('syntax error at or near "SELCT"');
-      },
-      async end() {
-        return undefined;
+    const { pool, sqlOf, releasedCount } = fakePool([], /fixture/);
+    await expect(runMigrations({ pool, migrationsDir })).rejects.toThrow(/SELCT/);
+    expect(sqlOf('client')).toContain('ROLLBACK');
+    expect(sqlOf('client')).not.toContain('COMMIT');
+    expect(releasedCount()).toBe(1);
+  });
+
+  it('keeps the migration error when the rollback itself fails', async () => {
+    const { pool } = fakePool([], /fixture/);
+    const failing: PoolLike = {
+      ...pool,
+      async connect() {
+        const client = await pool.connect();
+        return {
+          ...client,
+          async query(sql, values) {
+            if (sql === 'ROLLBACK') throw new Error('connection terminated');
+            return client.query(sql, values);
+          },
+        };
       },
     };
-    await expect(runMigrations({ pool, migrationsDir })).rejects.toThrow(/SELCT/);
-    expect(seen).toContain('ROLLBACK');
-    expect(seen).not.toContain('COMMIT');
+    await expect(runMigrations({ pool: failing, migrationsDir })).rejects.toThrow(/SELCT/);
+  });
+
+  it('refuses to run against a directory with no migrations', async () => {
+    const { pool, sqlOf } = fakePool([]);
+    await expect(
+      runMigrations({
+        pool,
+        migrationsDir: fileURLToPath(new URL('./__fixtures__/empty', import.meta.url)),
+      }),
+    ).rejects.toThrow(/no \.sql migrations found/);
+    expect(sqlOf()).not.toContain('BEGIN');
   });
 });
