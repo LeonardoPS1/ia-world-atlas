@@ -123,11 +123,30 @@ create index if not exists projects_location_idx on projects (location_id);
 create index if not exists projects_published_idx on projects (published_at desc);
 create index if not exists projects_last_verified_idx on projects (last_verified_at desc);
 
+-- array_to_string is marked STABLE because, for an arbitrary element type, it may
+-- have to call that type's input/output conversion routines. PostgreSQL therefore
+-- refuses it inside an index expression, which is why this index cannot be built
+-- with a bare array_to_string call.
+--
+-- For text[] -> text with a fixed delimiter the result really is immutable: the
+-- text output function is immutable and nothing else is involved. So we wrap
+-- exactly that case instead of promoting the anyarray overload, which would make
+-- a genuinely unstable function look indexable and could leave the index
+-- silently inconsistent for other element types.
+create or replace function atlas_text_array_join(arr text[], delimiter text)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(array_to_string(arr, delimiter), '');
+$$;
+
 -- The regconfig cast must be a literal for the expression to be indexable.
 create index if not exists projects_search_idx on projects using gin (
   to_tsvector(
     'spanish'::regconfig,
-    coalesce(name, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(array_to_string(tags, ' '), '')
+    coalesce(name, '') || ' ' || coalesce(summary, '') || ' ' || atlas_text_array_join(tags, ' ')
   )
 );
 
