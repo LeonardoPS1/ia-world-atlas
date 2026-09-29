@@ -2972,13 +2972,21 @@ const base: ProjectSummary = {
   latitude: -35.7,
   actors: ['Ministerio de Ciencia'],
   tags: ['national policy'],
-  publishedAt: null,
+  publishedAt: '2023-01-01T00:00:00.000Z',
   lastVerifiedAt: '2026-09-25T00:00:00.000Z',
   sourceCount: 2,
   eventCount: 2,
 };
 
-const other: ProjectSummary = { ...base, id: 'eu-ai-factories', type: 'INFRASTRUCTURE', name: 'European AI Factories', tags: ['compute'] };
+// `other` sorts BEFORE `base` by name ('European' precedes 'Politica') but carries
+// the EARLIER date, so the two sort modes disagree. Three traps are closed here.
+// Spreading `base` would copy base's publishedAt, and two equal dates never reach
+// the descending branch at all: the sort falls through to the name tiebreaker, so
+// a test named "orders by publication date descending" would assert the tiebreaker
+// instead while appearing to cover the date. And if the fixtures also agreed under
+// both orders, swapping the two assertions would leave the test green, which is
+// the same blind spot as the accent tests.
+const other: ProjectSummary = { ...base, id: 'eu-ai-factories', type: 'INFRASTRUCTURE', name: 'European AI Factories', tags: ['compute'], publishedAt: '2020-05-01T00:00:00.000Z' };
 
 describe('project filters', () => {
   it('ORs values inside one parameter and ANDs across parameters', () => {
@@ -3021,12 +3029,53 @@ describe('project filters', () => {
   it('filters by year range inclusive', () => {
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', yearFrom: 2021, yearTo: 2021 })).toBe(true);
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', yearFrom: 2022 })).toBe(false);
+    // The upper bound has its own branch, so it needs its own assertion. Without
+    // this, deleting the whole `yearTo` check leaves the range test green.
+    expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', yearTo: 2020 })).toBe(false);
+    expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', yearTo: 2021 })).toBe(true);
+  });
+
+  it('filters by location id', () => {
+    expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', locationIds: ['chile'] })).toBe(true);
+    expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', locationIds: ['chile', 'peru'] })).toBe(true);
+    expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', locationIds: ['peru'] })).toBe(false);
+  });
+
+  it('searches tags as well as name, summary, sector and location', () => {
+    // 'criptografia' appears in the tag array and nowhere else on the record, so
+    // dropping `...project.tags` from the haystack cannot go unnoticed.
+    const tagged: ProjectSummary = { ...base, tags: ['criptografia'] };
+    expect(matchesProjectFilters(tagged, { page: 1, pageSize: 50, sort: 'name', q: 'criptografia' })).toBe(true);
+    expect(matchesProjectFilters(tagged, { page: 1, pageSize: 50, sort: 'name', q: 'cripto' })).toBe(true);
+    expect(matchesProjectFilters(tagged, { page: 1, pageSize: 50, sort: 'name', q: 'criptografiaq' })).toBe(false);
+  });
+
+  it('ignores stopwords so an all-article query does not filter everything out', () => {
+    // A search box full of articles has to return the full result set, not none
+    // of it. Without this, the STOPWORDS set could be deleted and every search
+    // for "de" or "la" would silently return zero rows.
+    expect(searchTokensMatch('anything at all', 'de la')).toBe(true);
+    expect(searchTokensMatch('politica nacional', 'de los')).toBe(true);
+    // In a mixed query only the meaningful token has to match.
+    expect(searchTokensMatch('politica nacional', 'de inteligencia')).toBe(false);
+    expect(searchTokensMatch('politica nacional', 'de politica')).toBe(true);
   });
 
   it('orders by name and by publication date descending', () => {
     const list = [other, base];
-    expect(sortProjects(list, 'name').map((p) => p.id)).toEqual(['chile-national-ai-policy', 'eu-ai-factories']);
-    expect(sortProjects(list, 'publishedAt').map((p) => p.id)).toEqual(['eu-ai-factories', 'chile-national-ai-policy']);
+    // The two orders are deliberately opposite, so each assertion can only pass
+    // if that sort actually did its own job.
+    expect(sortProjects(list, 'name').map((p) => p.id)).toEqual(['eu-ai-factories', 'chile-national-ai-policy']);
+    expect(sortProjects(list, 'publishedAt').map((p) => p.id)).toEqual(['chile-national-ai-policy', 'eu-ai-factories']);
+  });
+
+  // The tiebreaker is the behaviour the previous version of this test was
+  // accidentally measuring. Undated projects sort last and break ties by name.
+  it('sorts undated projects last and breaks ties by name', () => {
+    const undatedB: ProjectSummary = { ...base, id: 'zzz-undated', name: 'Zeta', publishedAt: null };
+    const undatedA: ProjectSummary = { ...base, id: 'aaa-undated', name: 'Alpha', publishedAt: null };
+    const list = [undatedB, undatedA, other];
+    expect(sortProjects(list, 'publishedAt').map((p) => p.id)).toEqual(['eu-ai-factories', 'aaa-undated', 'zzz-undated']);
   });
 
   it('paginates with a stable total and totalPages', () => {
@@ -3114,7 +3163,7 @@ export function paginate<T>(list: T[], page: number, pageSize: number): Paginate
 - [ ] **Step 12: Run the filter test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/services/filters.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 13: Create the fixtures**
 
