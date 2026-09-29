@@ -2987,7 +2987,32 @@ describe('project filters', () => {
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', type: ['POLICY'], status: ['DEPLOYING'] })).toBe(false);
   });
 
-  it('matches accented and unaccented search text', () => {
+  it('folds accents so an unaccented query still finds accented text', () => {
+    // The fixture above is deliberately unaccented, so it cannot catch a broken
+    // fold: deleting `.normalize('NFD').replace(/[\u0300-\u036f]/g, '')` from
+    // filters.ts would leave every other test in this file green. The accented
+    // copy is what makes the folding observable, in both directions.
+    const accented: ProjectSummary = {
+      ...base,
+      name: 'Política Nacional de Inteligencia Artificial',
+      summary: 'Política vigente desde 2021 con plan de acción.',
+      sector: 'Políticas Públicas',
+    };
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', q: 'politica' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', q: 'política' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', q: 'inteligencia' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', q: 'accion' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', q: 'ausente' })).toBe(false);
+  });
+
+  it('compares the sector filter with the same accent folding', () => {
+    const accented: ProjectSummary = { ...base, sector: 'Políticas Públicas' };
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', sector: 'politicas publicas' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', sector: 'Políticas Públicas' })).toBe(true);
+    expect(matchesProjectFilters(accented, { page: 1, pageSize: 50, sort: 'name', sector: 'salud' })).toBe(false);
+  });
+
+  it('matches plain unaccented search text', () => {
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', q: 'politica' })).toBe(true);
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', q: 'artificial' })).toBe(true);
     expect(matchesProjectFilters(base, { page: 1, pageSize: 50, sort: 'name', q: 'ausente' })).toBe(false);
@@ -3089,7 +3114,7 @@ export function paginate<T>(list: T[], page: number, pageSize: number): Paginate
 - [ ] **Step 12: Run the filter test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/services/filters.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 13: Create the fixtures**
 
