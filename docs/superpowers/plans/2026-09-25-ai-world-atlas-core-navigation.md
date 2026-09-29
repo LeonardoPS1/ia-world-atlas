@@ -4396,7 +4396,7 @@ git commit -m "feat(api): add postgres repositories with tsvector search and rec
   - `parseListParam<T>(item: ZodType<T>): ZodOptional<ZodArray<ZodType<T>>>` — accepts repeated params and comma-separated values, yielding a deduplicated list.
   - `locationsQuerySchema`, `projectsQuerySchema`, `eventsQuerySchema`, `relationsQuerySchema` (Zod objects over the flattened query record).
   - `flattenQuery(raw: unknown): Record<string, string | string[]>` — converts Express `req.query` into strings/arrays and drops nested objects.
-  - `parseOr<T>(schema: ZodType<T>, raw: unknown, name: string): T` — throws `HttpError.badRequest([{ param, issues }])` on failure.
+  - `parseOr<Output>(schema: ZodType<Output, ZodTypeDef, unknown>, raw: unknown, name: string): Output` — throws `HttpError.badRequest([{ param, issues }])` on failure. The schema parameter pins the Zod input to `unknown` so that `Output` is the only inference site: writing `parseOr<T>(schema: ZodType<T>, ...): T` compiles, but `ZodType` declares both `_input` and `_output`, so `T` resolves to the input and every `.default()`/`.coerce()`/`z.preprocess()` field comes back optional or `unknown`.
   - `createApiRouter(repos: AtlasRepositories): Router` mounting every v1 route.
   - Routes registered by `app.ts`: `/api/health`, `/api/locations`, `/api/projects`, `/api/projects/:id`, `/api/events`, `/api/relations`, `/api/stats`. No write route.
 
@@ -4405,7 +4405,18 @@ git commit -m "feat(api): add postgres repositories with tsvector search and rec
 `apps/api/src/schemas/query.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { flattenQuery, locationsQuerySchema, parseListParam, projectsQuerySchema } from './query.js';
+import {
+  eventsQuerySchema,
+  flattenQuery,
+  locationsQuerySchema,
+  parseListParam,
+  parseOr,
+  projectsQuerySchema,
+  relationsQuerySchema,
+} from './query.js';
+import { HttpError } from '../errors/HttpError.js';
+import type { EventsQuery, LocationsQuery, ProjectsQuery } from '../repositories/types.js';
+import type { EvidenceLevel, ProjectStatus, ProjectType } from '@atlas/contracts';
 import { evidenceSchema, projectStatusSchema, projectTypeSchema } from '@atlas/contracts';
 import { z } from 'zod';
 
@@ -4482,6 +4493,60 @@ describe('locationsQuerySchema', () => {
   it('validates the level against the closed vocabulary', () => {
     expect(locationsQuerySchema.safeParse({ page: '1', pageSize: '50', level: 'CITY' }).success).toBe(true);
     expect(locationsQuerySchema.safeParse({ page: '1', pageSize: '50', level: 'TOWN' }).success).toBe(false);
+  });
+});
+
+describe('parseOr', () => {
+  // The type annotations below are the assertion, not decoration. `parseOr` used to
+  // be declared `parseOr<T>(schema: z.ZodType<T>, ...): T`. That compiles, but
+  // resolves `T` to the schema INPUT type: ZodType declares both `_input` and
+  // `_output`, so when they differ TypeScript gathers candidates for `T` from both
+  // and keeps the best common supertype, which is always the input. Every schema
+  // here uses `.default()`, `.coerce()` or `z.preprocess()`, so the input really is
+  // wider: `page?: number` instead of a guaranteed `page: number`, and `unknown`
+  // instead of a closed vocabulary. The routes then cannot hand the result to a
+  // repository. `npm run typecheck` compiles this file, so the guard is enforced
+  // rather than merely documented.
+  it('returns the validated output with pagination defaults applied', () => {
+    const locations: LocationsQuery = parseOr(locationsQuerySchema, {}, 'locations');
+    const projects: ProjectsQuery = parseOr(projectsQuerySchema, {}, 'projects');
+    const events: EventsQuery = parseOr(eventsQuerySchema, {}, 'events');
+    const relations = parseOr(relationsQuerySchema, { projectId: 'eu-ai-factories' }, 'relations');
+
+    expect(locations).toEqual({ page: 1, pageSize: 50 });
+    expect(projects).toEqual({ page: 1, pageSize: 50, sort: 'publishedAt' });
+    expect(events).toEqual({});
+    expect(relations).toEqual({ projectId: 'eu-ai-factories' });
+  });
+
+  it('keeps each closed vocabulary as its enum array instead of unknown', () => {
+    const parsed = parseOr(
+      projectsQuerySchema,
+      { type: 'POLICY,RESEARCH', status: ['ACTIVE'], evidence: 'REPORTED' },
+      'projects',
+    );
+    const type: ProjectType[] | undefined = parsed.type;
+    const status: ProjectStatus[] | undefined = parsed.status;
+    const evidence: EvidenceLevel[] | undefined = parsed.evidence;
+
+    expect(type).toEqual(['POLICY', 'RESEARCH']);
+    expect(status).toEqual(['ACTIVE']);
+    expect(evidence).toEqual(['REPORTED']);
+  });
+
+  it('throws a 400 HttpError that names the parameter and its issues', () => {
+    const attempt = () => parseOr(projectsQuerySchema, { pageSize: '500' }, 'projects');
+    expect(attempt).toThrowError(HttpError);
+
+    let details: unknown = 'parseOr did not throw';
+    try {
+      attempt();
+    } catch (error) {
+      if (error instanceof HttpError) details = error.details;
+    }
+    expect(details).toEqual([
+      { param: 'projects', issues: [{ path: 'pageSize', message: expect.any(String) }] },
+    ]);
   });
 });
 ```
@@ -4578,7 +4643,23 @@ export const relationsQuerySchema = zod.object({
   projectId: zod.string().trim().min(1).max(120),
 });
 
-export function parseOr<T>(schema: z.ZodType<T>, raw: unknown, param: string): T {
+/**
+ * Parse `raw` and return the validated output, or throw a 400 naming `param`.
+ *
+ * The schema parameter pins Zod's *input* type to `unknown` on purpose. The obvious
+ * `parseOr<T>(schema: z.ZodType<T>, ...): T` compiles, but `ZodType` declares both
+ * `_input` and `_output`, so `T` is inferred from both and resolves to the input,
+ * which is always the wider of the two. Since every schema here uses `.default()`,
+ * `.coerce()` or `z.preprocess()`, callers then received `page?: number` and
+ * `type?: unknown` instead of the validated output. Pinning the input to `unknown`
+ * leaves the output as the only inference site, and keeps `result.data` precise
+ * rather than `any`.
+ */
+export function parseOr<Output>(
+  schema: z.ZodType<Output, z.ZodTypeDef, unknown>,
+  raw: unknown,
+  param: string,
+): Output {
   const result = schema.safeParse(raw);
   if (!result.success) {
     throw HttpError.badRequest([
@@ -4598,7 +4679,7 @@ export function parseOr<T>(schema: z.ZodType<T>, raw: unknown, param: string): T
 - [ ] **Step 4: Run the query test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/schemas/query.test.ts`
-Expected: PASS, 11 tests. If the `projectStatusSchema`/`evidenceSchema` import is reported as missing from `@atlas/contracts`, run `npm run build --workspace @atlas/contracts` first.
+Expected: PASS, 19 tests. If the `projectStatusSchema`/`evidenceSchema` import is reported as missing from `@atlas/contracts`, run `npm run build --workspace @atlas/contracts` first.
 
 - [ ] **Step 5: Implement the routes**
 
@@ -4902,7 +4983,7 @@ describe('contract drift guard', () => {
 - [ ] **Step 8: Run the route test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/test/routes.test.ts`
-Expected: PASS, 17 tests. If `POST` returns 404 with a JSON body, confirm `notFoundHandler` runs before the error handler; the `HttpError.notFound` path guarantees a body.
+Expected: PASS, 19 tests. If `POST` returns 404 with a JSON body, confirm `notFoundHandler` runs before the error handler; the `HttpError.notFound` path guarantees a body.
 
 - [ ] **Step 9: Run the full API suite and typecheck**
 

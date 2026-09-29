@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from './errors/errorHandler.ts';
 import { requestId } from './middleware/requestId.ts';
 import { securityMiddleware } from './middleware/security.ts';
 import type { AtlasRepositories } from './repositories/types.ts';
+import { createApiRouter } from './routes/index.ts';
 
 export interface BuildAppOptions {
   repos: AtlasRepositories;
@@ -34,6 +35,8 @@ export function buildApp(options: BuildAppOptions): Express {
       time: new Date().toISOString(),
     });
   });
+
+  app.use('/api', createApiRouter(repos));
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));
