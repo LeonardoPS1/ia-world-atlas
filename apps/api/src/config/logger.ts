@@ -1,4 +1,4 @@
-import type { AppEnv } from './env.js';
+import type { AppEnv } from './env.ts';
 
 export interface Logger {
   debug(message: string, meta?: Record<string, unknown>): void;

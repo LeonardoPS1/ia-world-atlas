@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { PoolLike } from './types.js';
+import type { PoolLike } from './types.ts';
 
 export function createPool(connectionString: string): PoolLike {
   return new pg.Pool({

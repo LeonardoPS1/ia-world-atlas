@@ -1,7 +1,7 @@
 import cors from 'cors';
 import helmet from 'helmet';
 import type { RequestHandler } from 'express';
-import type { AppEnv } from '../config/env.js';
+import type { AppEnv } from '../config/env.ts';
 
 export function securityMiddleware(env: AppEnv): RequestHandler[] {
   const allowList = new Set(env.corsOrigins.filter((origin) => origin !== '*'));

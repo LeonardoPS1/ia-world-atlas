@@ -1,10 +1,10 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Logger } from '../config/logger.js';
-import { errorHandler, notFoundHandler } from './errorHandler.js';
-import { HttpError } from './HttpError.js';
-import { requestId } from '../middleware/requestId.js';
+import type { Logger } from '../config/logger.ts';
+import { errorHandler, notFoundHandler } from './errorHandler.ts';
+import { HttpError } from './HttpError.ts';
+import { requestId } from '../middleware/requestId.ts';
 
 function stubLogger() {
   return {

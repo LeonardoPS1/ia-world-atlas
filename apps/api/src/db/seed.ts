@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { PoolLike } from './types.js';
+import type { PoolLike } from './types.ts';
 
 export interface RunSeedOptions {
   pool: PoolLike;

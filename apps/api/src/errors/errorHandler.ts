@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
-import type { Logger } from '../config/logger.js';
-import { HttpError } from './HttpError.js';
+import type { Logger } from '../config/logger.ts';
+import { HttpError } from './HttpError.ts';
 
 export const notFoundHandler: RequestHandler = (req, _res, next) => {
   next(HttpError.notFound(`No route for ${req.method} ${req.path}`));

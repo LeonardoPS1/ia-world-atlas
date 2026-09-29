@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.js';
-import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
+import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.ts';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.ts';
 
 const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
 

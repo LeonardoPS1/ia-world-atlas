@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectSummary } from '@atlas/contracts';
-import { matchesProjectFilters, paginate, searchTokensMatch, sortProjects } from './filters.js';
+import { matchesProjectFilters, paginate, searchTokensMatch, sortProjects } from './filters.ts';
 
 const base: ProjectSummary = {
   id: 'chile-national-ai-policy',

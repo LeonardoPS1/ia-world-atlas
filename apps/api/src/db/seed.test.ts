@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { runSeed } from './seed.js';
-import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
+import { runSeed } from './seed.ts';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.ts';
 
 const seedFile = fileURLToPath(new URL('./__fixtures__/seed/001_core_seed.sql', import.meta.url));
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EnvValidationError, loadEnv } from './env.js';
+import { EnvValidationError, loadEnv } from './env.ts';
 
 const base = {
   NODE_ENV: 'test',

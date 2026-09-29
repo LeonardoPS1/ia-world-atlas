@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closePool, createPool } from '../src/db/pool.js';
-import { runMigrations } from '../src/db/migrate.js';
-import { runSeed } from '../src/db/seed.js';
-import type { ClientLike, PoolLike } from '../src/db/types.js';
+import { closePool, createPool } from '../src/db/pool.ts';
+import { runMigrations } from '../src/db/migrate.ts';
+import { runSeed } from '../src/db/seed.ts';
+import type { ClientLike, PoolLike } from '../src/db/types.ts';
 
 // This is the only test in the suite that executes SQL against a real server.
 // Everything else in apps/api mocks PoolLike, which means no other test can ever

@@ -1,5 +1,5 @@
 import type { Paginated, ProjectSummary } from '@atlas/contracts';
-import type { ProjectsQuery } from '../repositories/types.js';
+import type { ProjectsQuery } from '../repositories/types.ts';
 
 const STOPWORDS = new Set([
   'de',
