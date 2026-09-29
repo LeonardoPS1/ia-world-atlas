@@ -3823,8 +3823,8 @@ import { rowToLocation } from './mappers.js';
 
 const SELECT_LOCATION = `
   select l.id, l.name, l.level, l.parent_id, l.country_code,
-         st_x(l.geography) as longitude,
-         st_y(l.geography) as latitude,
+         st_x(l.geography::geometry) as longitude,
+         st_y(l.geography::geometry) as latitude,
          l.metadata,
          (select count(*)::int from locations c where c.parent_id = l.id) as child_count,
          (select count(*)::int from projects p where p.location_id = l.id) as project_count
@@ -3917,8 +3917,8 @@ const BASE_CTE = `
       case when p.geometry is null then 'location' else 'project' end as geometry_source,
       coalesce(p.geometry, l.geography) as point,
       l.name as location_name, l.level as location_level, l.parent_id as location_parent_id,
-      l.country_code as location_country_code, st_x(l.geography) as location_longitude,
-      st_y(l.geography) as location_latitude, l.metadata as location_metadata,
+      l.country_code as location_country_code, st_x(l.geography::geometry) as location_longitude,
+      st_y(l.geography::geometry) as location_latitude, l.metadata as location_metadata,
       (select count(*)::int from locations c where c.parent_id = l.id) as location_child_count,
       (select count(*)::int from projects lp where lp.location_id = l.id) as location_project_count,
       to_tsvector('spanish'::regconfig,
@@ -4003,10 +4003,18 @@ export function createProjectRepository(pool: PoolLike): ProjectRepository {
   return {
     async list(query: ProjectsQuery): Promise<Paginated<ProjectSummary>> {
       const { where, values, textLength } = buildFilters(query);
-      const countValues = values.slice(0, textLength);
+      // Two defects were found here by running the suite against a real
+      // PostGIS, not by reading this plan. The count query referenced the
+      // `base` CTE without the `with` clause that defines it, and it was given
+      // only `values.slice(0, textLength)` to bind. `textLength` records
+      // whether the ORDER BY may reference $1; it says nothing about how many
+      // values the where clause needs. Slicing worked only for a query with a
+      // single condition, so any query combining two filters died with
+      // "there is no parameter $1". The count query shares `where` and
+      // therefore needs every value, in order.
       const countResult = await pool.query(
-        `select count(*)::int as total from base${where}`,
-        countValues,
+        `${BASE_CTE} select count(*)::int as total from base${where}`,
+        values,
       );
       const total = Number((countResult.rows[0] as { total: number }).total);
 

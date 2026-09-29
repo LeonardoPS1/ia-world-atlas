@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool, createPool } from '../src/db/pool.ts';
 import { runMigrations } from '../src/db/migrate.ts';
 import { runSeed } from '../src/db/seed.ts';
+import { createPgRepositories } from '../src/repositories/pg/index.ts';
 import type { ClientLike, PoolLike } from '../src/db/types.ts';
 
 // This is the only test in the suite that executes SQL against a real server.
@@ -137,5 +139,133 @@ describe.skipIf(!testDatabaseUrl)('migration and seed against a real database', 
       `select id from projects where ${SEARCH_EXPRESSION} @@ plainto_tsquery('spanish', 'inteligencia')`,
     );
     expect(rows.map((row) => (row as { id: string }).id)).toEqual(['chile-national-ai-policy']);
+  });
+});
+
+// Same reasoning, one layer up: the repositories speak SQL, so only a real server
+// can tell whether the queries they build are valid at all. The plan's own step 7
+// was never executed, which is how the count query below shipped referencing a
+// CTE it never defined.
+describe.skipIf(!testDatabaseUrl)('postgres repositories against a real database', () => {
+  let pool: PoolLike;
+  const repos = () => createPgRepositories(pool);
+
+  beforeAll(async () => {
+    pool = createPool(testDatabaseUrl as string);
+    // A clean schema, not the leftovers of the suite above: the sequence test
+    // there inserts a row, and the assertions below pin exact counts.
+    await resetSchema(pool);
+    await runMigrations({ pool, migrationsDir });
+    await runSeed({ pool, seedFile });
+  });
+
+  afterAll(async () => {
+    if (pool) await closePool(pool);
+  });
+
+  it('seeds eleven locations covering the six levels', async () => {
+    const all = await repos().locations.all();
+    expect(all).toHaveLength(11);
+    expect(new Set(all.map((location) => location.level)).size).toBe(6);
+  });
+
+  it('seeds five projects and no relations', async () => {
+    const page = await repos().projects.list({ page: 1, pageSize: 50, sort: 'name' });
+    expect(page.total).toBe(5);
+    const relations = await repos().relations.listByProject('eu-ai-factories');
+    expect(relations).toEqual([]);
+  });
+
+  it('falls back to the location centroid when project geometry is null', async () => {
+    const detail = await repos().projects.findById('chile-national-ai-policy');
+    expect(detail?.geometrySource).toBe('location');
+    expect(detail?.longitude).toBeCloseTo(-71.5, 3);
+  });
+
+  it('finds the project whose own geometry is set', async () => {
+    const detail = await repos().projects.findById('pucv-fondecyt-fuzzy');
+    expect(detail?.geometrySource).toBe('project');
+  });
+
+  it('returns sources, events and status history in the detail payload', async () => {
+    const detail = await repos().projects.findById('chile-national-ai-policy');
+    expect(detail?.sources.length).toBeGreaterThanOrEqual(1);
+    expect(detail?.events.length).toBe(2);
+    expect(detail?.statusHistory.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('expands a parent location into its descendants', async () => {
+    const ids = await repos().locations.descendantIds('chile');
+    expect(ids).toEqual(expect.arrayContaining(['chile', 'vina-del-mar', 'pucv-campus']));
+  });
+
+  it('matches accented and unaccented search through the tsvector index', async () => {
+    // Both directions are asserted because one direction alone cannot catch a
+    // broken fold. The first version of this test compared 'politica' with
+    // 'politica' and passed whatever the implementation did, which is the same
+    // class of defect as the empty accent test in filters.test.ts.
+    //
+    // Measured against PostGIS rather than assumed: the seed stores the name
+    // unaccented, and plainto_tsquery('spanish', ...) reduces both 'politica'
+    // and 'política' to the single lexeme 'polit', so the spanish dictionary
+    // folds accents on the query side exactly as it does on the document side.
+    const unaccented = await repos().projects.list({ page: 1, pageSize: 50, sort: 'name', q: 'politica' });
+    const accented = await repos().projects.list({ page: 1, pageSize: 50, sort: 'name', q: 'política' });
+    const absent = await repos().projects.list({ page: 1, pageSize: 50, sort: 'name', q: 'ausente' });
+
+    expect(unaccented.total).toBe(1);
+    expect(unaccented.data[0]?.id).toBe('chile-national-ai-policy');
+    expect(accented.total).toBe(1);
+    expect(accented.data[0]?.id).toBe('chile-national-ai-policy');
+    // A term nobody wrote must still come back empty, or the predicate is
+    // matching everything and the two assertions above prove nothing.
+    expect(absent.total).toBe(0);
+  });
+
+  it('filters by type and status with AND across parameters', async () => {
+    const page = await repos().projects.list({
+      page: 1,
+      pageSize: 50,
+      sort: 'name',
+      type: ['INFRASTRUCTURE'],
+      status: ['DEPLOYING'],
+    });
+    expect(page.data.map((project) => project.id)).toEqual(['eu-ai-factories']);
+  });
+
+  it('paginates with a stable total', async () => {
+    const first = await repos().projects.list({ page: 1, pageSize: 2, sort: 'name' });
+    const second = await repos().projects.list({ page: 2, pageSize: 2, sort: 'name' });
+    expect(first.total).toBe(5);
+    expect(first.totalPages).toBe(3);
+    expect(first.data).toHaveLength(2);
+    expect(second.data).toHaveLength(2);
+  });
+
+  it('rejects an unknown project id with null instead of throwing', async () => {
+    const detail = await repos().projects.findById(`missing-${randomUUID()}`);
+    expect(detail).toBeNull();
+  });
+
+  it('reports global totals without filters', async () => {
+    const stats = await repos().stats.overview();
+    expect(stats.totals).toEqual({ projects: 5, locations: 11, sources: 7 });
+    expect(stats.byEvidence).toEqual({ ANNOUNCED: 1, REPORTED: 4 });
+  });
+
+  it('filters events by project and by year', async () => {
+    const byProject = await repos().events.list({ projectId: 'chile-national-ai-policy' });
+    expect(byProject).toHaveLength(2);
+    const byYear = await repos().events.list({ yearFrom: 2030, yearTo: 2040 });
+    expect(byYear).toHaveLength(0);
+  });
+
+  it('reports the database as down rather than throwing when the server is gone', async () => {
+    const broken = createPgRepositories({
+      query: () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:5432')),
+      connect: () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:5432')),
+      end: () => Promise.resolve(),
+    });
+    await expect(broken.health.ping()).resolves.toBe(false);
   });
 });
