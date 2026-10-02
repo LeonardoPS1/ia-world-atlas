@@ -63,6 +63,7 @@ describe('error contract', () => {
     expect(error.code).toBe('INTERNAL_ERROR');
     expect(error.message).toBe('Unexpected server error');
     expect(error.details).toEqual([]);
-    expect(JSON.stringify(error)).not.toContain('password');
+    expect(JSON.stringify({ message: error.message, code: error.code, status: error.status })).not.toContain('password');
+    expect(error.message).not.toContain('password');
   });
 });

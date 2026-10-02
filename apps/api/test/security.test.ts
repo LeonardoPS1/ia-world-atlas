@@ -48,7 +48,8 @@ describe('CORS allowlist', () => {
 
   it('never advertises write methods', async () => {
     const response = await request(appWith('http://localhost:5173')).options('/api/projects');
-    expect(String(response.headers['access-control-allow-methods'] ?? '')).not.toContain('POST');
+    expect(response.headers['access-control-allow-methods']).toBeDefined();
+    expect(String(response.headers['access-control-allow-methods'])).not.toContain('POST');
   });
 });
 
