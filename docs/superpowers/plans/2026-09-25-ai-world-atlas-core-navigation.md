@@ -2588,7 +2588,7 @@ git commit -m "feat(api): add audited seed with eleven locations and verified so
 `apps/api/src/config/env.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { EnvValidationError, loadEnv } from './env.js';
+import { EnvValidationError, loadEnv } from './env.ts';
 
 const base = {
   NODE_ENV: 'test',
@@ -2634,7 +2634,7 @@ describe('loadEnv', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project api apps/api/src/config/env.test.ts`
-Expected: FAIL — `Failed to resolve import "./env.js"`.
+Expected: FAIL — `Failed to resolve import "./env.ts"`.
 
 - [ ] **Step 3: Implement `src/config/env.ts`**
 
@@ -2695,7 +2695,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
 - [ ] **Step 4: Implement `src/config/logger.ts`**
 
 ```ts
-import type { AppEnv } from './env.js';
+import type { AppEnv } from './env.ts';
 
 export interface Logger {
   debug(message: string, meta?: Record<string, unknown>): void;
@@ -2773,7 +2773,7 @@ export class HttpError extends Error {
 ```ts
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import type { Logger } from '../config/logger.js';
-import { HttpError } from './HttpError.js';
+import { HttpError } from './HttpError.ts';
 
 export const notFoundHandler: RequestHandler = (req, _res, next) => {
   next(HttpError.notFound(`No route for ${req.method} ${req.path}`));
@@ -2841,7 +2841,7 @@ export const requestId: RequestHandler = (req, res, next) => {
 import cors from 'cors';
 import helmet from 'helmet';
 import type { RequestHandler } from 'express';
-import type { AppEnv } from '../config/env.js';
+import type { AppEnv } from '../config/env.ts';
 
 export function securityMiddleware(env: AppEnv): RequestHandler[] {
   const allowList = new Set(env.corsOrigins.filter((origin) => origin !== '*'));
@@ -3447,7 +3447,7 @@ export function createFakeRepositories(data: AtlasData): AtlasRepositories {
 ```ts
 import express from 'express';
 import type { Express } from 'express';
-import type { AppEnv } from './config/env.js';
+import type { AppEnv } from './config/env.ts';
 import type { Logger } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './errors/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
@@ -3494,10 +3494,10 @@ export function buildApp(options: BuildAppOptions): Express {
 ```ts
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { loadEnv } from '../src/config/env.js';
-import { createFakeRepositories } from '../src/repositories/fake.js';
-import { atlasDataFixture } from '../src/testing/fixtures.js';
+import { buildApp } from '../src/app.ts';
+import { loadEnv } from '../src/config/env.ts';
+import { createFakeRepositories } from '../src/repositories/fake.ts';
+import { atlasDataFixture } from '../src/testing/fixtures.ts';
 import type { AtlasData } from '../src/testing/types.js';
 
 const env = loadEnv({
@@ -3565,8 +3565,8 @@ git rm -q apps/api/src/server.js
 `apps/api/src/server.ts`:
 ```ts
 import 'dotenv/config';
-import { buildApp } from './app.js';
-import { loadEnv } from './config/env.js';
+import { buildApp } from './app.ts';
+import { loadEnv } from './config/env.ts';
 import { createLogger } from './config/logger.js';
 import { createPool, closePool } from './db/pool.js';
 import { createPgRepositories } from './repositories/pg/index.js';
@@ -3598,7 +3598,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { createPool, closePool } from './pool.js';
 import { runMigrations } from './migrate.js';
-import { loadEnv } from '../config/env.js';
+import { loadEnv } from '../config/env.ts';
 
 const env = loadEnv();
 const pool = createPool(env.databaseUrl);
@@ -3618,7 +3618,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { createPool, closePool } from './pool.js';
 import { runSeed } from './seed.js';
-import { loadEnv } from '../config/env.js';
+import { loadEnv } from '../config/env.ts';
 
 const env = loadEnv();
 const pool = createPool(env.databaseUrl);
@@ -4414,7 +4414,7 @@ import {
   projectsQuerySchema,
   relationsQuerySchema,
 } from './query.js';
-import { HttpError } from '../errors/HttpError.js';
+import { HttpError } from '../errors/HttpError.ts';
 import type { EventsQuery, LocationsQuery, ProjectsQuery } from '../repositories/types.js';
 import type { EvidenceLevel, ProjectStatus, ProjectType } from '@atlas/contracts';
 import { evidenceSchema, projectStatusSchema, projectTypeSchema } from '@atlas/contracts';
@@ -4567,7 +4567,7 @@ import {
 } from '@atlas/contracts';
 import type { z } from 'zod';
 import { z as zod } from 'zod';
-import { HttpError } from '../errors/HttpError.js';
+import { HttpError } from '../errors/HttpError.ts';
 
 export function flattenQuery(raw: unknown): Record<string, string | string[]> {
   if (typeof raw !== 'object' || raw === null) return {};
@@ -4702,7 +4702,7 @@ export function createLocationsRoute(repos: AtlasRepositories): Router {
 `apps/api/src/routes/projects.ts`:
 ```ts
 import { Router } from 'express';
-import { HttpError } from '../errors/HttpError.js';
+import { HttpError } from '../errors/HttpError.ts';
 import type { AtlasRepositories } from '../repositories/types.js';
 import { flattenQuery, parseOr, projectsQuerySchema } from '../schemas/query.js';
 
@@ -4831,10 +4831,10 @@ import { createApiRouter } from './routes/index.js';
 ```ts
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { loadEnv } from '../src/config/env.js';
-import { createFakeRepositories } from '../src/repositories/fake.js';
-import { atlasDataFixture } from '../src/testing/fixtures.js';
+import { buildApp } from '../src/app.ts';
+import { loadEnv } from '../src/config/env.ts';
+import { createFakeRepositories } from '../src/repositories/fake.ts';
+import { atlasDataFixture } from '../src/testing/fixtures.ts';
 import { locationsQuerySchema, projectsQuerySchema, statsResponseSchema, projectDetailSchema } from '@atlas/contracts';
 
 const env = loadEnv({
@@ -5014,10 +5014,10 @@ git commit -m "feat(api): add read-only v1 routes with validated query contracts
 ```ts
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { loadEnv } from '../src/config/env.js';
-import { createFakeRepositories } from '../src/repositories/fake.js';
-import { atlasDataFixture } from '../src/testing/fixtures.js';
+import { buildApp } from '../src/app.ts';
+import { loadEnv } from '../src/config/env.ts';
+import { createFakeRepositories } from '../src/repositories/fake.ts';
+import { atlasDataFixture } from '../src/testing/fixtures.ts';
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -5104,10 +5104,10 @@ describe('anonymous writes', () => {
 ```ts
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { loadEnv } from '../src/config/env.js';
-import { createFakeRepositories } from '../src/repositories/fake.js';
-import { atlasDataFixture } from '../src/testing/fixtures.js';
+import { buildApp } from '../src/app.ts';
+import { loadEnv } from '../src/config/env.ts';
+import { createFakeRepositories } from '../src/repositories/fake.ts';
+import { atlasDataFixture } from '../src/testing/fixtures.ts';
 import { apiErrorSchema } from '@atlas/contracts';
 
 const env = loadEnv({
@@ -5168,7 +5168,7 @@ If any assertion fails, fix the production code — do not weaken the assertion.
 Append this direct unit check to `apps/api/test/errors.test.ts` as well, because `HttpError.internal` is part of the public error surface and is not reachable through the fake repositories:
 
 ```ts
-import { HttpError } from '../src/errors/HttpError.js';
+import { HttpError } from '../src/errors/HttpError.ts';
 
 it('redacts the cause inside HttpError.internal', () => {
   const error = HttpError.internal(new Error('password authentication failed for user "atlas"'));
@@ -6276,7 +6276,7 @@ Expected: PASS, 6 tests.
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, ContractError, createApiClient } from './client.js';
 import { locationListResponseSchema, projectListResponseSchema } from '@atlas/contracts';
-import { atlasDataFixture, projectDetailFixture } from '../testing/fixtures.js';
+import { atlasDataFixture, projectDetailFixture } from '../testing/fixtures.ts';
 
 const ok = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -6957,7 +6957,7 @@ describe('filter state helpers', () => {
 import { describe, expect, it } from 'vitest';
 import { clampYear, eventsInYear, yearStep } from './timeline.js';
 import type { TimelineState } from './timeline.js';
-import { eventsFixture } from '../testing/fixtures.js';
+import { eventsFixture } from '../testing/fixtures.ts';
 
 const state: TimelineState = { year: 2023, playing: false, minYear: 2020, maxYear: 2026 };
 
@@ -6996,7 +6996,7 @@ describe('eventsInYear', () => {
 ```ts
 import { describe, expect, it } from 'vitest';
 import { LEVEL_ORDER, breadcrumbTrail, canDescend, descendantIds, isDescendant, normalizeBounds } from './geo.js';
-import { locationsFixture } from '../testing/fixtures.js';
+import { locationsFixture } from '../testing/fixtures.ts';
 
 const byId = (id: string) => {
   const found = locationsFixture.find((location) => location.id === id);
@@ -7320,7 +7320,7 @@ Expected: PASS, 4 files / 19 tests.
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialState, createStore } from './store.js';
 import type { Action } from './store.js';
-import { listBodies, atlasDataFixture } from '../testing/fixtures.js';
+import { listBodies, atlasDataFixture } from '../testing/fixtures.ts';
 
 const projectBody = { data: listBodies.projects.data, page: 1, pageSize: 50, total: 5, totalPages: 1 };
 
@@ -7640,7 +7640,7 @@ git commit -m "feat(web): add immutable store semantic palette and hierarchy sel
 import { describe, expect, it } from 'vitest';
 import { pickAccent, sortSources, sortTimelineEvents, visibleProjectsInYear } from './normalize.js';
 import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.js';
-import { eventsFixture, projectsFixture, sourcesFixture } from '../testing/fixtures.js';
+import { eventsFixture, projectsFixture, sourcesFixture } from '../testing/fixtures.ts';
 
 describe('pickAccent', () => {
   it('is deterministic for the same project', () => {
@@ -7787,7 +7787,7 @@ Expected: PASS, 6 tests. If `pickAccent` returns a gradient stop or an HSL strin
 import { describe, expect, it } from 'vitest';
 import { buildSelectors } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
-import { atlasDataFixture, listBodies } from '../testing/fixtures.js';
+import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 
 function loadedState() {
   const store = createStore(createInitialState());
@@ -8834,7 +8834,7 @@ git commit -m "feat(web): add map diagnostics clustering markers and the globe a
 import { describe, expect, it, vi } from 'vitest';
 import { createFallbackAdapter, projectToEquirectangular } from './fallback.js';
 import type { Cluster } from '../state/selectors.js';
-import { clustersFixture } from '../testing/fixtures.js';
+import { clustersFixture } from '../testing/fixtures.ts';
 
 describe('projectToEquirectangular', () => {
   it('maps the equator to the vertical middle', () => {
@@ -9338,7 +9338,7 @@ describe('renderStatusBadge', () => {
   it('never renders a stack trace even if the error text contains one', () => {
     const node = render({
       apiStatus: 'error',
-      apiError: 'Error: boom\n    at Object.<anonymous> (app.js:1:1)',
+      apiError: 'Error: boom\n    at Object.<anonymous> (app.ts:1:1)',
       globalTotal: 0,
       matchingTotal: 0,
       lastRequestId: 'req-1',
@@ -9354,7 +9354,7 @@ import { describe, expect, it } from 'vitest';
 import { renderLegend } from './legend.js';
 import { buildSelectors } from '../state/selectors.js';
 import { createInitialState, createStore } from '../state/store.js';
-import { atlasDataFixture, listBodies } from '../testing/fixtures.js';
+import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 import { EVIDENCE_COLORS } from '../state/colors.js';
 
 function selectors() {
@@ -9641,7 +9641,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderScale } from './scaleControls.js';
 import { buildSelectors } from '../state/selectors.js';
 import { createInitialState, createStore } from '../state/store.js';
-import { atlasDataFixture, listBodies } from '../testing/fixtures.js';
+import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 import { LEVEL_ORDER } from '../state/geo.js';
 
 function state() {
@@ -9699,7 +9699,7 @@ import { createShell } from './shell.js';
 import { createHeader } from './header.js';
 import { buildSelectors } from '../state/selectors.js';
 import { createInitialState, createStore } from '../state/store.js';
-import { atlasDataFixture, listBodies } from '../testing/fixtures.js';
+import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 import { projectTypeSchema } from '@atlas/contracts';
 
 function loaded() {
@@ -9972,7 +9972,7 @@ Expected: PASS, 7 files / 25 tests.
 import { describe, expect, it, vi } from 'vitest';
 import { createDrawer, renderDrawer } from './drawer.js';
 import { createShell } from './shell.js';
-import { projectDetailFixture } from '../testing/fixtures.js';
+import { projectDetailFixture } from '../testing/fixtures.ts';
 
 function setup() {
   const refs = createShell(document.createElement('div'));
@@ -10080,7 +10080,7 @@ import { createStrip, renderStrip } from './strip.js';
 import { createShell } from './shell.js';
 import { buildSelectors } from '../state/selectors.js';
 import { createInitialState, createStore } from '../state/store.js';
-import { atlasDataFixture, eventsFixture, listBodies } from '../testing/fixtures.js';
+import { atlasDataFixture, eventsFixture, listBodies } from '../testing/fixtures.ts';
 
 function loaded() {
   const store = createStore(createInitialState());
@@ -10570,7 +10570,7 @@ import { createDataController } from './dataController.js';
 import { createApiClient } from '../data/client.js';
 import { createStore, createInitialState } from '../state/store.js';
 import { buildQueryString } from '../data/query.js';
-import { listBodies, atlasDataFixture } from '../testing/fixtures.js';
+import { listBodies, atlasDataFixture } from '../testing/fixtures.ts';
 
 function harness() {
   const urls: string[] = [];
@@ -10806,7 +10806,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { boot } from './boot.js';
 import type { MapAdapter } from './dataController.js';
 import { createApiClient } from '../data/client.js';
-import { listBodies, atlasDataFixture, projectDetailFixture } from '../testing/fixtures.js';
+import { listBodies, atlasDataFixture, projectDetailFixture } from '../testing/fixtures.ts';
 
 function fakeAdapter(): MapAdapter & { setClusters: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> } {
   return {
@@ -11373,13 +11373,13 @@ The API runs with `ATLAS_REPOS=memory`, so the E2E suite needs no database. Real
 
 ```ts
 import 'dotenv/config';
-import { buildApp } from './app.js';
-import { loadEnv } from './config/env.js';
+import { buildApp } from './app.ts';
+import { loadEnv } from './config/env.ts';
 import { createLogger } from './config/logger.js';
 import { createPool, closePool } from './db/pool.js';
 import { createPgRepositories } from './repositories/pg/index.js';
-import { createFakeRepositories } from './repositories/fake.js';
-import { atlasDataFixture } from './testing/fixtures.js';
+import { createFakeRepositories } from './repositories/fake.ts';
+import { atlasDataFixture } from './testing/fixtures.ts';
 import type { AtlasRepositories } from './repositories/types.js';
 
 const env = loadEnv();
