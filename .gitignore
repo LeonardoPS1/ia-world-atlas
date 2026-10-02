@@ -54,3 +54,4 @@ temp/
 
 # Docs build artifacts (keep the reviewed PDF of the spec)
 docs/superpowers/specs/*.tmp.html
+.atl/

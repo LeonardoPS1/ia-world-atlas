@@ -24,6 +24,6 @@ export function securityMiddleware(env: AppEnv): RequestHandler[] {
       };
   return [
     helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }),
-    cors(corsOptions as cors.CorsOptions),
+    cors(corsOptions),
   ];
 }
