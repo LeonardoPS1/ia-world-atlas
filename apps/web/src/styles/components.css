@@ -471,3 +471,68 @@
   border-radius: 50%;
   opacity: 0.5;
 }
+
+.breadcrumb__sep {
+  color: var(--color-text-faint);
+}
+
+.status-badge__detail {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.legend-footnote {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.drawer-summary {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-warm-white);
+}
+
+.drawer-subtitle {
+  margin: 20px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.source-card__title {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.source-card__url--plain {
+  color: var(--color-text-faint);
+  text-decoration: line-through;
+}
+
+.timeline-events {
+  grid-column: 1 / -1;
+  max-height: 54px;
+  overflow-y: auto;
+}
+
+.timeline-events .event-row {
+  border-top: none;
+  padding: 2px 0;
+}
