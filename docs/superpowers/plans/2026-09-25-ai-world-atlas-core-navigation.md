@@ -1351,8 +1351,8 @@ plus the audited seed. Task 4 adds that script.
 ```ts
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.js';
-import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
+import { MIGRATIONS_TABLE, runMigrations, sortMigrationFiles } from './migrate.ts';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.ts';
 
 const migrationsDir = fileURLToPath(new URL('./__fixtures__/migrations', import.meta.url));
 
@@ -1518,7 +1518,7 @@ exercised rather than being a property of a one-element list:
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project api apps/api/src/db/migrate.test.ts`
-Expected: FAIL — `Failed to resolve import "./migrate.js"`.
+Expected: FAIL — `Failed to resolve import "./migrate.ts"`.
 
 - [ ] **Step 3: Implement `src/db/types.ts`**
 
@@ -1552,7 +1552,7 @@ export interface PoolLike {
 ```ts
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PoolLike } from './types.js';
+import type { PoolLike } from './types.ts';
 
 export const MIGRATIONS_TABLE = 'schema_migrations';
 
@@ -1654,7 +1654,7 @@ next run retries it. Through `PoolLike#query` that guarantee does not hold.
 `apps/api/src/db/pool.ts`:
 ```ts
 import pg from 'pg';
-import type { PoolLike } from './types.js';
+import type { PoolLike } from './types.ts';
 
 export function createPool(connectionString: string): PoolLike {
   return new pg.Pool({
@@ -2074,8 +2074,8 @@ against the client list is the version of this test that fails when the runner r
 ```ts
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { runSeed } from './seed.js';
-import type { ClientLike, PoolLike, QueryResultLike } from './types.js';
+import { runSeed } from './seed.ts';
+import type { ClientLike, PoolLike, QueryResultLike } from './types.ts';
 
 const seedFile = fileURLToPath(new URL('./__fixtures__/seed/001_core_seed.sql', import.meta.url));
 
@@ -2198,14 +2198,14 @@ insert into dummy_seed_probe values ('duplicate key'); -- deliberately failing s
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project api apps/api/src/db/seed.test.ts`
-Expected: FAIL — `Failed to resolve import "./seed.js"`.
+Expected: FAIL — `Failed to resolve import "./seed.ts"`.
 
 - [ ] **Step 3: Implement `src/db/seed.ts`**
 
 `apps/api/src/db/seed.ts`:
 ```ts
 import { readFile } from 'node:fs/promises';
-import type { PoolLike } from './types.js';
+import type { PoolLike } from './types.ts';
 
 export interface RunSeedOptions {
   pool: PoolLike;
@@ -2772,7 +2772,7 @@ export class HttpError extends Error {
 `src/errors/errorHandler.ts`:
 ```ts
 import type { ErrorRequestHandler, RequestHandler } from 'express';
-import type { Logger } from '../config/logger.js';
+import type { Logger } from '../config/logger.ts';
 import { HttpError } from './HttpError.ts';
 
 export const notFoundHandler: RequestHandler = (req, _res, next) => {
@@ -2869,6 +2869,8 @@ export function securityMiddleware(env: AppEnv): RequestHandler[] {
 }
 ```
 
+`cors@2.8.6` only emits a literal `*` when the `origin` option is the string `'*'`; given a function it reflects the request origin instead. The wildcard branch must therefore pass `origin: '*'` as a literal, not via a callback.
+
 - [ ] **Step 7: Run the env test and confirm it passes**
 
 Run: `npx vitest run --project api apps/api/src/config/env.test.ts`
@@ -2963,7 +2965,7 @@ export interface AtlasRepositories {
 ```ts
 import { describe, expect, it } from 'vitest';
 import type { ProjectSummary } from '@atlas/contracts';
-import { matchesProjectFilters, paginate, searchTokensMatch, sortProjects } from './filters.js';
+import { matchesProjectFilters, paginate, searchTokensMatch, sortProjects } from './filters.ts';
 
 const base: ProjectSummary = {
   id: 'chile-national-ai-policy',
@@ -3102,13 +3104,13 @@ describe('project filters', () => {
 - [ ] **Step 10: Run it and confirm failure**
 
 Run: `npx vitest run --project api apps/api/src/services/filters.test.ts`
-Expected: FAIL — `Failed to resolve import "./filters.js"`.
+Expected: FAIL — `Failed to resolve import "./filters.ts"`.
 
 - [ ] **Step 11: Implement `src/services/filters.ts`**
 
 ```ts
 import type { Paginated, ProjectSummary } from '@atlas/contracts';
-import type { ProjectsQuery } from '../repositories/types.js';
+import type { ProjectsQuery } from '../repositories/types.ts';
 
 const STOPWORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'para', 'con', 'un', 'una']);
 
@@ -3177,7 +3179,7 @@ Expected: PASS, 12 tests.
 `apps/api/src/testing/fixtures.ts`:
 ```ts
 import type { Event, Location, ProjectDetail, Relation, Source } from '@atlas/contracts';
-import type { AtlasData } from './types.js';
+import type { AtlasData } from './types.ts';
 
 const location = (
   id: string,
@@ -3342,14 +3344,14 @@ export interface AtlasData {
 `apps/api/src/repositories/fake.ts`:
 ```ts
 import type { Event, Location, Paginated, ProjectDetail, ProjectSummary, Relation, StatsResponse } from '@atlas/contracts';
-import type { AtlasData } from '../testing/types.js';
-import { matchesProjectFilters, paginate, sortProjects } from '../services/filters.js';
+import type { AtlasData } from '../testing/types.ts';
+import { matchesProjectFilters, paginate, sortProjects } from '../services/filters.ts';
 import type {
   AtlasRepositories,
   EventsQuery,
   LocationsQuery,
   ProjectsQuery,
-} from './types.js';
+} from './types.ts';
 
 function toSummary(detail: ProjectDetail): ProjectSummary {
   const { location: _location, sources: _sources, events: _events, relations: _relations, statusHistory: _statusHistory, impactRecords: _impactRecords, impact: _impact, geometrySource: _geometrySource, ...summary } = detail;
@@ -3455,11 +3457,11 @@ export function createFakeRepositories(data: AtlasData): AtlasRepositories {
 import express from 'express';
 import type { Express } from 'express';
 import type { AppEnv } from './config/env.ts';
-import type { Logger } from './config/logger.js';
-import { errorHandler, notFoundHandler } from './errors/errorHandler.js';
-import { requestId } from './middleware/requestId.js';
-import { securityMiddleware } from './middleware/security.js';
-import type { AtlasRepositories } from './repositories/types.js';
+import type { Logger } from './config/logger.ts';
+import { errorHandler, notFoundHandler } from './errors/errorHandler.ts';
+import { requestId } from './middleware/requestId.ts';
+import { securityMiddleware } from './middleware/security.ts';
+import type { AtlasRepositories } from './repositories/types.ts';
 
 export interface BuildAppOptions {
   repos: AtlasRepositories;
@@ -3505,7 +3507,7 @@ import { buildApp } from '../src/app.ts';
 import { loadEnv } from '../src/config/env.ts';
 import { createFakeRepositories } from '../src/repositories/fake.ts';
 import { atlasDataFixture } from '../src/testing/fixtures.ts';
-import type { AtlasData } from '../src/testing/types.js';
+import type { AtlasData } from '../src/testing/types.ts';
 
 const env = loadEnv({
   NODE_ENV: 'test',
@@ -3574,9 +3576,9 @@ git rm -q apps/api/src/server.js
 import 'dotenv/config';
 import { buildApp } from './app.ts';
 import { loadEnv } from './config/env.ts';
-import { createLogger } from './config/logger.js';
-import { createPool, closePool } from './db/pool.js';
-import { createPgRepositories } from './repositories/pg/index.js';
+import { createLogger } from './config/logger.ts';
+import { createPool, closePool } from './db/pool.ts';
+import { createPgRepositories } from './repositories/pg/index.ts';
 
 const env = loadEnv();
 const logger = createLogger(env.logLevel);
@@ -3603,8 +3605,8 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 ```ts
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
-import { createPool, closePool } from './pool.js';
-import { runMigrations } from './migrate.js';
+import { createPool, closePool } from './pool.ts';
+import { runMigrations } from './migrate.ts';
 import { loadEnv } from '../config/env.ts';
 
 const env = loadEnv();
@@ -3623,8 +3625,8 @@ try {
 ```ts
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
-import { createPool, closePool } from './pool.js';
-import { runSeed } from './seed.js';
+import { createPool, closePool } from './pool.ts';
+import { runSeed } from './seed.ts';
 import { loadEnv } from '../config/env.ts';
 
 const env = loadEnv();
@@ -3824,9 +3826,9 @@ export function rowToProjectDetail(
 `apps/api/src/repositories/pg/locations.ts`:
 ```ts
 import type { Location, Paginated } from '@atlas/contracts';
-import type { PoolLike } from '../../db/types.js';
-import type { LocationRepository, LocationsQuery } from '../types.js';
-import { rowToLocation } from './mappers.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { LocationRepository, LocationsQuery } from '../types.ts';
+import { rowToLocation } from './mappers.ts';
 
 const SELECT_LOCATION = `
   select l.id, l.name, l.level, l.parent_id, l.country_code,
@@ -3903,8 +3905,8 @@ export function createLocationRepository(pool: PoolLike): LocationRepository {
 `apps/api/src/repositories/pg/projects.ts`:
 ```ts
 import type { Paginated, ProjectDetail, ProjectSummary } from '@atlas/contracts';
-import type { PoolLike } from '../../db/types.js';
-import type { ProjectRepository, ProjectsQuery } from '../types.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { ProjectRepository, ProjectsQuery } from '../types.ts';
 import {
   rowToEvent,
   rowToImpactRecord,
@@ -3914,7 +3916,7 @@ import {
   rowToRelation,
   rowToSource,
   rowToStatusHistoryEntry,
-} from './mappers.js';
+} from './mappers.ts';
 
 const BASE_CTE = `
   with base as (
@@ -4123,9 +4125,9 @@ export function createProjectRepository(pool: PoolLike): ProjectRepository {
 `apps/api/src/repositories/pg/events.ts`:
 ```ts
 import type { Event } from '@atlas/contracts';
-import type { PoolLike } from '../../db/types.js';
-import type { EventRepository, EventsQuery } from '../types.js';
-import { rowToEvent } from './mappers.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { EventRepository, EventsQuery } from '../types.ts';
+import { rowToEvent } from './mappers.ts';
 
 export function createEventRepository(pool: PoolLike): EventRepository {
   return {
@@ -4159,9 +4161,9 @@ export function createEventRepository(pool: PoolLike): EventRepository {
 `apps/api/src/repositories/pg/relations.ts`:
 ```ts
 import type { Relation } from '@atlas/contracts';
-import type { PoolLike } from '../../db/types.js';
-import type { RelationRepository } from '../types.js';
-import { rowToRelation } from './mappers.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { RelationRepository } from '../types.ts';
+import { rowToRelation } from './mappers.ts';
 
 export function createRelationRepository(pool: PoolLike): RelationRepository {
   return {
@@ -4183,8 +4185,8 @@ export function createRelationRepository(pool: PoolLike): RelationRepository {
 `apps/api/src/repositories/pg/stats.ts`:
 ```ts
 import type { StatsResponse } from '@atlas/contracts';
-import type { PoolLike } from '../../db/types.js';
-import type { StatsRepository } from '../types.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { StatsRepository } from '../types.ts';
 
 function toRecord(rows: unknown[]): Record<string, number> {
   const output: Record<string, number> = {};
@@ -4229,13 +4231,13 @@ export function createStatsRepository(pool: PoolLike): StatsRepository {
 
 `apps/api/src/repositories/pg/index.ts`:
 ```ts
-import type { PoolLike } from '../../db/types.js';
-import type { AtlasRepositories } from '../types.js';
-import { createEventRepository } from './events.js';
-import { createLocationRepository } from './locations.js';
-import { createProjectRepository } from './projects.js';
-import { createRelationRepository } from './relations.js';
-import { createStatsRepository } from './stats.js';
+import type { PoolLike } from '../../db/types.ts';
+import type { AtlasRepositories } from '../types.ts';
+import { createEventRepository } from './events.ts';
+import { createLocationRepository } from './locations.ts';
+import { createProjectRepository } from './projects.ts';
+import { createRelationRepository } from './relations.ts';
+import { createStatsRepository } from './stats.ts';
 
 export function createPgRepositories(pool: PoolLike): AtlasRepositories {
   return {
@@ -4270,11 +4272,11 @@ Expected: PASS. If it still fails on `createPgRepositories`, confirm the import 
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { closePool, createPool } from '../src/db/pool.js';
-import { runMigrations } from '../src/db/migrate.js';
-import { runSeed } from '../src/db/seed.js';
-import { createPgRepositories } from '../src/repositories/pg/index.js';
-import type { PoolLike } from '../src/db/types.js';
+import { closePool, createPool } from '../src/db/pool.ts';
+import { runMigrations } from '../src/db/migrate.ts';
+import { runSeed } from '../src/db/seed.ts';
+import { createPgRepositories } from '../src/repositories/pg/index.ts';
+import type { PoolLike } from '../src/db/types.ts';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -4420,9 +4422,9 @@ import {
   parseOr,
   projectsQuerySchema,
   relationsQuerySchema,
-} from './query.js';
+} from './query.ts';
 import { HttpError } from '../errors/HttpError.ts';
-import type { EventsQuery, LocationsQuery, ProjectsQuery } from '../repositories/types.js';
+import type { EventsQuery, LocationsQuery, ProjectsQuery } from '../repositories/types.ts';
 import type { EvidenceLevel, ProjectStatus, ProjectType } from '@atlas/contracts';
 import { evidenceSchema, projectStatusSchema, projectTypeSchema } from '@atlas/contracts';
 import { z } from 'zod';
@@ -4561,7 +4563,7 @@ describe('parseOr', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project api apps/api/src/schemas/query.test.ts`
-Expected: FAIL — `Failed to resolve import "./query.js"`.
+Expected: FAIL — `Failed to resolve import "./query.ts"`.
 
 - [ ] **Step 3: Implement `src/schemas/query.ts`**
 
@@ -4693,8 +4695,8 @@ Expected: PASS, 19 tests. If the `projectStatusSchema`/`evidenceSchema` import i
 `apps/api/src/routes/locations.ts`:
 ```ts
 import { Router } from 'express';
-import type { AtlasRepositories } from '../repositories/types.js';
-import { flattenQuery, locationsQuerySchema, parseOr } from '../schemas/query.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
+import { flattenQuery, locationsQuerySchema, parseOr } from '../schemas/query.ts';
 
 export function createLocationsRoute(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4710,8 +4712,8 @@ export function createLocationsRoute(repos: AtlasRepositories): Router {
 ```ts
 import { Router } from 'express';
 import { HttpError } from '../errors/HttpError.ts';
-import type { AtlasRepositories } from '../repositories/types.js';
-import { flattenQuery, parseOr, projectsQuerySchema } from '../schemas/query.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
+import { flattenQuery, parseOr, projectsQuerySchema } from '../schemas/query.ts';
 
 export function createProjectsRoute(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4738,8 +4740,8 @@ export function createProjectsRoute(repos: AtlasRepositories): Router {
 `apps/api/src/routes/events.ts`:
 ```ts
 import { Router } from 'express';
-import type { AtlasRepositories } from '../repositories/types.js';
-import { eventsQuerySchema, flattenQuery, parseOr } from '../schemas/query.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
+import { eventsQuerySchema, flattenQuery, parseOr } from '../schemas/query.ts';
 
 export function createEventsRoute(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4755,8 +4757,8 @@ export function createEventsRoute(repos: AtlasRepositories): Router {
 `apps/api/src/routes/relations.ts`:
 ```ts
 import { Router } from 'express';
-import type { AtlasRepositories } from '../repositories/types.js';
-import { flattenQuery, parseOr, relationsQuerySchema } from '../schemas/query.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
+import { flattenQuery, parseOr, relationsQuerySchema } from '../schemas/query.ts';
 
 export function createRelationsRoute(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4772,7 +4774,7 @@ export function createRelationsRoute(repos: AtlasRepositories): Router {
 `apps/api/src/routes/stats.ts`:
 ```ts
 import { Router } from 'express';
-import type { AtlasRepositories } from '../repositories/types.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
 
 export function createStatsRoute(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4786,12 +4788,12 @@ export function createStatsRoute(repos: AtlasRepositories): Router {
 `apps/api/src/routes/index.ts`:
 ```ts
 import { Router } from 'express';
-import type { AtlasRepositories } from '../repositories/types.js';
-import { createEventsRoute } from './events.js';
-import { createLocationsRoute } from './locations.js';
-import { createProjectsRoute } from './projects.js';
-import { createRelationsRoute } from './relations.js';
-import { createStatsRoute } from './stats.js';
+import type { AtlasRepositories } from '../repositories/types.ts';
+import { createEventsRoute } from './events.ts';
+import { createLocationsRoute } from './locations.ts';
+import { createProjectsRoute } from './projects.ts';
+import { createRelationsRoute } from './relations.ts';
+import { createStatsRoute } from './stats.ts';
 
 export function createApiRouter(repos: AtlasRepositories): Router {
   const router = Router();
@@ -4829,7 +4831,7 @@ Replace the single `app.get('/api/health', ...)` block in `apps/api/src/app.ts` 
 
 Add the import at the top of `app.ts`:
 ```ts
-import { createApiRouter } from './routes/index.js';
+import { createApiRouter } from './routes/index.ts';
 ```
 
 - [ ] **Step 7: Write the failing route test**
@@ -5013,7 +5015,7 @@ git commit -m "feat(api): add read-only v1 routes with validated query contracts
 
 **Interfaces:**
 - Consumes: `buildApp` (Tasks 5 and 7), `loadEnv` (Task 5), `createFakeRepositories` (Task 5).
-- Produces: no new runtime symbols. This task is the regression net for the P0/P1 findings in spec §1: anonymous writes, wildcard CORS, leaked PostgreSQL messages and unsafe source URLs.
+- Produces: no new runtime symbols. This task is the regression net for the P0/P1 findings in spec §1: anonymous writes, wildcard CORS and leaked PostgreSQL messages.
 
 - [ ] **Step 1: Write the security test**
 
@@ -5069,7 +5071,8 @@ describe('CORS allowlist', () => {
 
   it('never advertises write methods', async () => {
     const response = await request(appWith('http://localhost:5173')).options('/api/projects');
-    expect(String(response.headers['access-control-allow-methods'] ?? '')).not.toContain('POST');
+    expect(response.headers['access-control-allow-methods']).toBeDefined();
+    expect(String(response.headers['access-control-allow-methods'])).not.toContain('POST');
   });
 });
 
@@ -5183,7 +5186,8 @@ it('redacts the cause inside HttpError.internal', () => {
   expect(error.code).toBe('INTERNAL_ERROR');
   expect(error.message).toBe('Unexpected server error');
   expect(error.details).toEqual([]);
-  expect(JSON.stringify(error)).not.toContain('password');
+  expect(JSON.stringify({ message: error.message, code: error.code, status: error.status })).not.toContain('password');
+  expect(error.message).not.toContain('password');
 });
 ```
 
@@ -5195,7 +5199,7 @@ Expected: all pass, with the single documented `skipped: db integration` line fr
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add apps/api/test/security.test.ts apps/api/test/errors.test.ts docs/superpowers/plans/2026-09-25-ai-world-atlas-core-navigation.md
 git commit -m "test(api): cover cors allowlist anonymous writes and error redaction"
 ```
 
@@ -5226,7 +5230,7 @@ git commit -m "test(api): cover cors allowlist anonymous writes and error redact
 `apps/web/src/ui/dom.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { clear, el, svgEl } from './dom.js';
+import { clear, el, svgEl } from './dom.ts';
 
 describe('el', () => {
   it('sets attributes and skips null, undefined and false values', () => {
@@ -5269,7 +5273,7 @@ describe('svgEl', () => {
 `apps/web/src/data/urls.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { safeExternalUrl } from './urls.js';
+import { safeExternalUrl } from './urls.ts';
 
 describe('safeExternalUrl', () => {
   it('accepts https', () => {
@@ -5299,7 +5303,7 @@ describe('safeExternalUrl', () => {
 - [ ] **Step 2: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/ui/dom.test.ts apps/web/src/data/urls.test.ts`
-Expected: FAIL — `Failed to resolve import "./dom.js"` and `./urls.js`.
+Expected: FAIL — `Failed to resolve import "./dom.ts"` and `./urls.ts`.
 
 - [ ] **Step 3: Implement `src/ui/dom.ts`**
 
@@ -5382,7 +5386,7 @@ export function safeExternalUrl(url: string, options: SafeUrlOptions = {}): stri
 - [ ] **Step 5: Implement `src/ui/icons.ts`**
 
 ```ts
-import { svgEl } from './dom.js';
+import { svgEl } from './dom.ts';
 
 export type IconName =
   | 'close'
@@ -5440,8 +5444,8 @@ export function icon(name: IconName, size = 16): SVGElement {
 `apps/web/src/ui/icons.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { icon } from './icons.js';
-import type { IconName } from './icons.js';
+import { icon } from './icons.ts';
+import type { IconName } from './icons.ts';
 
 const names: IconName[] = [
   'close', 'search', 'play', 'pause', 'back', 'chevron-left', 'chevron-right',
@@ -6189,7 +6193,7 @@ git commit -m "feat(web): add design tokens base styles safe dom primitives and 
 `apps/web/src/data/query.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { buildQueryString } from './query.js';
+import { buildQueryString } from './query.ts';
 
 describe('buildQueryString', () => {
   it('returns an empty string when nothing survives', () => {
@@ -6223,12 +6227,12 @@ describe('buildQueryString', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/data/query.test.ts`
-Expected: FAIL — `Failed to resolve import "./query.js"`.
+Expected: FAIL — `Failed to resolve import "./query.ts"`.
 
 - [ ] **Step 3: Implement `src/data/query.ts`**
 
 ```ts
-import type { QueryValue } from './types.js';
+import type { QueryValue } from './types.ts';
 
 export function buildQueryString(params: Record<string, unknown>): string {
   const pairs: string[] = [];
@@ -6281,7 +6285,7 @@ Expected: PASS, 6 tests.
 `apps/web/src/data/client.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { ApiRequestError, ContractError, createApiClient } from './client.js';
+import { ApiRequestError, ContractError, createApiClient } from './client.ts';
 import { locationListResponseSchema, projectListResponseSchema } from '@atlas/contracts';
 import { atlasDataFixture, projectDetailFixture } from '../testing/fixtures.ts';
 
@@ -6410,7 +6414,7 @@ describe('createApiClient', () => {
 - [ ] **Step 6: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/data/client.test.ts`
-Expected: FAIL — `Failed to resolve import "./client.js"`.
+Expected: FAIL — `Failed to resolve import "./client.ts"`.
 
 - [ ] **Step 7: Implement `src/data/client.ts`**
 
@@ -6435,7 +6439,7 @@ import type {
   StatsResponse,
 } from '@atlas/contracts';
 import type { z } from 'zod';
-import { buildQueryString } from './query.js';
+import { buildQueryString } from './query.ts';
 
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -6574,10 +6578,10 @@ Web tests need the same fixture objects the API tests use, otherwise the client 
 
 Then create `apps/web/src/testing/fixtures.ts`:
 ```ts
-import { eventsFixture, locationsFixture, projectsFixture, sourcesFixture } from './fixture-data.js';
+import { eventsFixture, locationsFixture, projectsFixture, sourcesFixture } from './fixture-data.ts';
 
-export { atlasDataFixture, projectsFixture, locationsFixture, eventsFixture } from './fixture-data.js';
-export * from './fixture-data.js';
+export { atlasDataFixture, projectsFixture, locationsFixture, eventsFixture } from './fixture-data.ts';
+export * from './fixture-data.ts';
 
 const sourcesFor = (projectId: string) =>
   sourcesFixture
@@ -6679,7 +6683,7 @@ import {
   levelLabel,
   statusLabel,
   typeLabel,
-} from './colors.js';
+} from './colors.ts';
 import {
   evidenceSchema,
   locationLevelSchema,
@@ -6749,7 +6753,7 @@ describe('semantic colours', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/state/colors.test.ts`
-Expected: FAIL — `Failed to resolve import "./colors.js"`.
+Expected: FAIL — `Failed to resolve import "./colors.ts"`.
 
 - [ ] **Step 3: Implement `src/state/colors.ts`**
 
@@ -6762,7 +6766,7 @@ import type {
   LocationLevel,
   ProjectStatus,
   ProjectType,
-} from '../data/types.js';
+} from '../data/types.ts';
 
 export const STATUS_COLORS: Readonly<Record<ProjectStatus, string>> = {
   ANNOUNCED: '#5a6577',
@@ -6902,8 +6906,8 @@ Expected: PASS, 6 tests. If the "separates adjacent statuses perceptually" test 
 `apps/web/src/state/filters.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, isFilterActive, toQuery, toggleInList } from './filters.js';
-import type { AtlasFilters } from './filters.js';
+import { activeFilterCount, isFilterActive, toQuery, toggleInList } from './filters.ts';
+import type { AtlasFilters } from './filters.ts';
 
 const empty: AtlasFilters = {
   q: '',
@@ -6962,8 +6966,8 @@ describe('filter state helpers', () => {
 `apps/web/src/state/timeline.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { clampYear, eventsInYear, yearStep } from './timeline.js';
-import type { TimelineState } from './timeline.js';
+import { clampYear, eventsInYear, yearStep } from './timeline.ts';
+import type { TimelineState } from './timeline.ts';
 import { eventsFixture } from '../testing/fixtures.ts';
 
 const state: TimelineState = { year: 2023, playing: false, minYear: 2020, maxYear: 2026 };
@@ -7002,7 +7006,7 @@ describe('eventsInYear', () => {
 `apps/web/src/state/geo.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { LEVEL_ORDER, breadcrumbTrail, canDescend, descendantIds, isDescendant, normalizeBounds } from './geo.js';
+import { LEVEL_ORDER, breadcrumbTrail, canDescend, descendantIds, isDescendant, normalizeBounds } from './geo.ts';
 import { locationsFixture } from '../testing/fixtures.ts';
 
 const byId = (id: string) => {
@@ -7071,7 +7075,7 @@ describe('normalizeBounds', () => {
 `apps/web/src/state/palette.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { MARKER_SHAPES, markerShapeFor, markerSizeFor } from './palette.js';
+import { MARKER_SHAPES, markerShapeFor, markerSizeFor } from './palette.ts';
 import { locationLevelSchema, projectStatusSchema } from '@atlas/contracts';
 
 describe('marker shapes', () => {
@@ -7102,13 +7106,13 @@ describe('marker shapes', () => {
 - [ ] **Step 6: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/state`
-Expected: FAIL on `filters.js`, `timeline.js`, `geo.js` and `palette.js`.
+Expected: FAIL on `filters.ts`, `timeline.ts`, `geo.ts` and `palette.ts`.
 
 - [ ] **Step 7: Implement the four modules**
 
 `src/state/filters.ts`:
 ```ts
-import type { EvidenceLevel, ProjectStatus, ProjectType } from '../data/types.js';
+import type { EvidenceLevel, ProjectStatus, ProjectType } from '../data/types.ts';
 import type { StatsResponse } from '@atlas/contracts';
 
 export interface AtlasFilters {
@@ -7170,7 +7174,7 @@ export type StatsLike = StatsResponse;
 
 `src/state/timeline.ts`:
 ```ts
-import type { EventRecord } from '../data/types.js';
+import type { EventRecord } from '../data/types.ts';
 
 export interface TimelineState {
   year: number;
@@ -7197,7 +7201,7 @@ Do not add a `yearSpan` helper here. The strip in Task 16 needs a min and a max,
 
 `src/state/geo.ts`:
 ```ts
-import type { Location, LocationLevel } from '../data/types.js';
+import type { Location, LocationLevel } from '../data/types.ts';
 
 export const LEVEL_ORDER: readonly LocationLevel[] = [
   'WORLD',
@@ -7279,7 +7283,7 @@ export function normalizeBounds(
 
 `src/state/palette.ts`:
 ```ts
-import type { LocationLevel } from '../data/types.js';
+import type { LocationLevel } from '../data/types.ts';
 
 export type MarkerShape = 'circle' | 'ring' | 'triangle' | 'square' | 'diamond' | 'dot';
 
@@ -7325,8 +7329,8 @@ Expected: PASS, 4 files / 19 tests.
 `apps/web/src/state/store.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createInitialState, createStore } from './store.js';
-import type { Action } from './store.js';
+import { createInitialState, createStore } from './store.ts';
+import type { Action } from './store.ts';
 import { listBodies, atlasDataFixture } from '../testing/fixtures.ts';
 
 const projectBody = { data: listBodies.projects.data, page: 1, pageSize: 50, total: 5, totalPages: 1 };
@@ -7443,11 +7447,11 @@ import type {
   ProjectListResponse,
   StatsResponse,
 } from '@atlas/contracts';
-import type { HealthResponse, Location, LocationLevel, ProjectSummary } from '../data/types.js';
-import type { AtlasFilters } from './filters.js';
-import { EMPTY_FILTERS, toggleInList } from './filters.js';
-import type { TimelineState } from './timeline.js';
-import { clampYear } from './timeline.js';
+import type { HealthResponse, Location, LocationLevel, ProjectSummary } from '../data/types.ts';
+import type { AtlasFilters } from './filters.ts';
+import { EMPTY_FILTERS, toggleInList } from './filters.ts';
+import type { TimelineState } from './timeline.ts';
+import { clampYear } from './timeline.ts';
 
 export interface AtlasState {
   filters: AtlasFilters;
@@ -7645,8 +7649,8 @@ git commit -m "feat(web): add immutable store semantic palette and hierarchy sel
 `apps/web/src/data/normalize.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { pickAccent, sortSources, sortTimelineEvents, visibleProjectsInYear } from './normalize.js';
-import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.js';
+import { pickAccent, sortSources, sortTimelineEvents, visibleProjectsInYear } from './normalize.ts';
+import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.ts';
 import { eventsFixture, projectsFixture, sourcesFixture } from '../testing/fixtures.ts';
 
 describe('pickAccent', () => {
@@ -7711,7 +7715,7 @@ describe('visibleProjectsInYear', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/data/normalize.test.ts`
-Expected: FAIL — `Failed to resolve import "./normalize.js"`.
+Expected: FAIL — `Failed to resolve import "./normalize.ts"`.
 
 - [ ] **Step 3: Implement `src/data/normalize.ts`**
 
@@ -7722,8 +7726,8 @@ import type {
   ProjectStatus,
   ProjectSummary,
   Source,
-} from './types.js';
-import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.js';
+} from './types.ts';
+import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.ts';
 
 const STATUS_ORDER: Readonly<Record<ProjectStatus, number>> = {
   OPERATIONAL: 0,
@@ -7792,8 +7796,8 @@ Expected: PASS, 6 tests. If `pickAccent` returns a gradient stop or an HSL strin
 `apps/web/src/state/selectors.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { buildSelectors } from './selectors.js';
-import { createInitialState, createStore } from './store.js';
+import { buildSelectors } from './selectors.ts';
+import { createInitialState, createStore } from './store.ts';
 import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 
 function loadedState() {
@@ -7873,18 +7877,18 @@ describe('buildSelectors', () => {
 - [ ] **Step 6: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/state/selectors.test.ts`
-Expected: FAIL — `Failed to resolve import "./selectors.js"`.
+Expected: FAIL — `Failed to resolve import "./selectors.ts"`.
 
 - [ ] **Step 7: Implement `src/state/selectors.ts`**
 
 ```ts
 import type {
   AtlasState,
-} from './store.js';
-import { STATUS_COLORS, EVIDENCE_COLORS, EVIDENCE_INTENTS, evidenceColor, levelLabel, statusColor } from './colors.js';
-import { breadcrumbTrail, descendantIds } from './geo.js';
-import { markerShapeFor, markerSizeFor } from './palette.js';
-import { pickAccent, visibleProjectsInYear } from '../data/normalize.js';
+} from './store.ts';
+import { STATUS_COLORS, EVIDENCE_COLORS, EVIDENCE_INTENTS, evidenceColor, levelLabel, statusColor } from './colors.ts';
+import { breadcrumbTrail, descendantIds } from './geo.ts';
+import { markerShapeFor, markerSizeFor } from './palette.ts';
+import { pickAccent, visibleProjectsInYear } from '../data/normalize.ts';
 import { evidenceSchema, locationLevelSchema, projectStatusSchema } from '@atlas/contracts';
 import type {
   EvidenceLevel,
@@ -7892,8 +7896,8 @@ import type {
   LocationLevel,
   ProjectStatus,
   ProjectSummary,
-} from '../data/types.js';
-import type { MarkerShape } from './palette.js';
+} from '../data/types.ts';
+import type { MarkerShape } from './palette.ts';
 
 export interface Cluster {
   id: string;
@@ -8059,7 +8063,7 @@ git commit -m "feat(web): derive clusters legend summaries and a single accent"
 `apps/web/src/map/diagnostics.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { diagnoseMapEnvironment } from './diagnostics.js';
+import { diagnoseMapEnvironment } from './diagnostics.ts';
 
 function fakeWindow(webgl: boolean) {
   return {
@@ -8134,7 +8138,7 @@ describe('diagnoseMapEnvironment', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/map/diagnostics.test.ts`
-Expected: FAIL — `Failed to resolve import "./diagnostics.js"`.
+Expected: FAIL — `Failed to resolve import "./diagnostics.ts"`.
 
 - [ ] **Step 3: Implement `src/map/diagnostics.ts`**
 
@@ -8210,8 +8214,8 @@ Expected: PASS, 4 tests.
 `apps/web/src/map/cluster.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { clusterAt } from './cluster.js';
-import type { Cluster } from '../state/selectors.js';
+import { clusterAt } from './cluster.ts';
+import type { Cluster } from '../state/selectors.ts';
 
 function cluster(id: string, x: number, y: number, count = 1): Cluster {
   return {
@@ -8254,8 +8258,8 @@ describe('clusterAt', () => {
 `apps/web/src/map/markers.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { createMarkerElement } from './markers.js';
-import type { Cluster } from '../state/selectors.js';
+import { createMarkerElement } from './markers.ts';
+import type { Cluster } from '../state/selectors.ts';
 
 const base: Cluster = {
   id: 'valparaiso-city::2026',
@@ -8320,13 +8324,13 @@ describe('createMarkerElement', () => {
 - [ ] **Step 6: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/map/cluster.test.ts apps/web/src/map/markers.test.ts`
-Expected: FAIL — `Failed to resolve import "./cluster.js"` and `"./markers.js"`.
+Expected: FAIL — `Failed to resolve import "./cluster.ts"` and `"./markers.ts"`.
 
 - [ ] **Step 7: Implement `src/map/cluster.ts` and `src/map/markers.ts`**
 
 `src/map/cluster.ts`:
 ```ts
-import type { Cluster } from '../state/selectors.js';
+import type { Cluster } from '../state/selectors.ts';
 
 export function clusterAt(
   clusters: readonly Cluster[],
@@ -8352,10 +8356,10 @@ export function clusterAt(
 
 `src/map/markers.ts`:
 ```ts
-import { el, svgEl } from '../ui/dom.js';
-import { levelLabel, statusLabel } from '../state/colors.js';
-import type { Cluster } from '../state/selectors.js';
-import type { MarkerShape } from '../state/palette.js';
+import { el, svgEl } from '../ui/dom.ts';
+import { levelLabel, statusLabel } from '../state/colors.ts';
+import type { Cluster } from '../state/selectors.ts';
+import type { MarkerShape } from '../state/palette.ts';
 
 const GLYPH: Readonly<Record<MarkerShape, () => SVGElement>> = {
   ring: () => svgEl('circle', { cx: 10, cy: 10, r: 8, fill: 'none', 'stroke-width': 1.25 }),
@@ -8422,7 +8426,7 @@ Expected: PASS, 3 files / 13 tests. The "never renders a solid circle fill" test
 `apps/web/src/map/globe.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM, MIN_ZOOM, createGlobeAdapter } from './globe.js';
+import { INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM, MIN_ZOOM, createGlobeAdapter } from './globe.ts';
 
 function fakeMapClass() {
   const instances: Array<Record<string, ReturnType<typeof vi.fn>>> = [];
@@ -8542,15 +8546,15 @@ describe('createGlobeAdapter', () => {
 - [ ] **Step 10: Run the globe test and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/map/globe.test.ts`
-Expected: FAIL — `Failed to resolve import "./globe.js"`.
+Expected: FAIL — `Failed to resolve import "./globe.ts"`.
 
 - [ ] **Step 11: Implement `src/map/globe.ts`**
 
 ```ts
-import { createMarkerElement } from './markers.js';
-import { clusterAt } from './cluster.js';
-import type { MapDiagnostics } from './diagnostics.js';
-import type { Cluster } from '../state/selectors.js';
+import { createMarkerElement } from './markers.ts';
+import { clusterAt } from './cluster.ts';
+import type { MapDiagnostics } from './diagnostics.ts';
+import type { Cluster } from '../state/selectors.ts';
 
 export const INITIAL_CENTER: [number, number] = [-71.543, -33.0472];
 export const INITIAL_ZOOM = 2.6;
@@ -8839,8 +8843,8 @@ git commit -m "feat(web): add map diagnostics clustering markers and the globe a
 `apps/web/src/map/fallback.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createFallbackAdapter, projectToEquirectangular } from './fallback.js';
-import type { Cluster } from '../state/selectors.js';
+import { createFallbackAdapter, projectToEquirectangular } from './fallback.ts';
+import type { Cluster } from '../state/selectors.ts';
 import { clustersFixture } from '../testing/fixtures.ts';
 
 describe('projectToEquirectangular', () => {
@@ -8923,9 +8927,9 @@ describe('createFallbackAdapter', () => {
 
 Append to `apps/web/src/testing/fixtures.ts`:
 ```ts
-import type { Cluster } from '../state/selectors.js';
-import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.js';
-import { markerShapeFor, markerSizeFor } from '../state/palette.js';
+import type { Cluster } from '../state/selectors.ts';
+import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.ts';
+import { markerShapeFor, markerSizeFor } from '../state/palette.ts';
 
 /** One cluster per fixture location, derived the same way `buildSelectors` derives them. */
 export const clustersFixture: Cluster[] = locationsFixture.map((location, index) => ({
@@ -8946,17 +8950,17 @@ export const fallbackAccents = EVIDENCE_COLORS;
 - [ ] **Step 3: Run the fallback test and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/map/fallback.test.ts`
-Expected: FAIL — `Failed to resolve import "./fallback.js"` and missing `clustersFixture`.
+Expected: FAIL — `Failed to resolve import "./fallback.ts"` and missing `clustersFixture`.
 
 - [ ] **Step 4: Implement `src/map/fallback.ts`**
 
 ```ts
-import { createMarkerElement } from './markers.js';
-import { el, svgEl } from '../ui/dom.js';
-import { icon } from '../ui/icons.js';
-import { levelLabel } from '../state/colors.js';
-import type { MapAdapter } from './globe.js';
-import type { Cluster } from '../state/selectors.js';
+import { createMarkerElement } from './markers.ts';
+import { el, svgEl } from '../ui/dom.ts';
+import { icon } from '../ui/icons.ts';
+import { levelLabel } from '../state/colors.ts';
+import type { MapAdapter } from './globe.ts';
+import type { Cluster } from '../state/selectors.ts';
 
 const MERIDIANS = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
 const PARALLELS = [-60, -30, 0, 30, 60];
@@ -9130,7 +9134,7 @@ git commit -m "feat(web): add data-only fallback map with an honest diagnostic b
 `apps/web/src/ui/shell.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { createShell } from './shell.js';
+import { createShell } from './shell.ts';
 
 describe('createShell', () => {
   it('creates the six regions with their test hooks', () => {
@@ -9162,12 +9166,12 @@ describe('createShell', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/ui/shell.test.ts`
-Expected: FAIL — `Failed to resolve import "./shell.js"`.
+Expected: FAIL — `Failed to resolve import "./shell.ts"`.
 
 - [ ] **Step 3: Implement `src/ui/shell.ts`**
 
 ```ts
-import { el } from './dom.js';
+import { el } from './dom.ts';
 
 export interface ShellRefs {
   root: HTMLElement;
@@ -9216,8 +9220,8 @@ Expected: PASS, 3 tests.
 `apps/web/src/ui/header.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createHeader } from './header.js';
-import { createShell } from './shell.js';
+import { createHeader } from './header.ts';
+import { createShell } from './shell.ts';
 
 describe('createHeader', () => {
   function setup() {
@@ -9308,7 +9312,7 @@ describe('renderBreadcrumb', () => {
 `apps/web/src/ui/statusBadge.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { renderStatusBadge } from './statusBadge.js';
+import { renderStatusBadge } from './statusBadge.ts';
 
 function render(state: Parameters<typeof renderStatusBadge>[1]) {
   const node = document.createElement('div');
@@ -9358,11 +9362,11 @@ describe('renderStatusBadge', () => {
 `apps/web/src/ui/legend.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { renderLegend } from './legend.js';
-import { buildSelectors } from '../state/selectors.js';
-import { createInitialState, createStore } from '../state/store.js';
+import { renderLegend } from './legend.ts';
+import { buildSelectors } from '../state/selectors.ts';
+import { createInitialState, createStore } from '../state/store.ts';
 import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
-import { EVIDENCE_COLORS } from '../state/colors.js';
+import { EVIDENCE_COLORS } from '../state/colors.ts';
 
 function selectors() {
   const store = createStore(createInitialState());
@@ -9412,15 +9416,15 @@ describe('renderLegend', () => {
 - [ ] **Step 6: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/ui`
-Expected: FAIL on `header.js`, `statusBadge.js` and `legend.js`.
+Expected: FAIL on `header.ts`, `statusBadge.ts` and `legend.ts`.
 
 - [ ] **Step 7: Implement `src/ui/header.ts`, `breadcrumb.ts`, `statusBadge.ts` and `legend.ts`**
 
 `src/ui/header.ts`:
 ```ts
-import { el } from './dom.js';
-import { icon } from './icons.js';
-import type { ShellRefs } from './shell.js';
+import { el } from './dom.ts';
+import { icon } from './icons.ts';
+import type { ShellRefs } from './shell.ts';
 
 export interface HeaderRefs {
   root: HTMLElement;
@@ -9479,9 +9483,9 @@ The search input is debounced in the controller (Task 16), not here. This module
 
 `src/ui/breadcrumb.ts`:
 ```ts
-import { el, clear } from './dom.js';
-import { levelLabel } from '../state/colors.js';
-import type { Location } from '../data/types.js';
+import { el, clear } from './dom.ts';
+import { levelLabel } from '../state/colors.ts';
+import type { Location } from '../data/types.ts';
 
 export function renderBreadcrumb(
   node: HTMLElement,
@@ -9520,8 +9524,8 @@ Clicking the deepest crumb focuses its **parent**, which is how the user steps b
 
 `src/ui/statusBadge.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import type { AtlasState } from '../state/store.js';
+import { clear, el } from './dom.ts';
+import type { AtlasState } from '../state/store.ts';
 
 type BadgeState = Pick<AtlasState, 'apiStatus' | 'apiError' | 'globalTotal' | 'matchingTotal' | 'lastRequestId'>;
 
@@ -9566,9 +9570,9 @@ export function renderStatusBadge(node: HTMLElement, state: BadgeState): void {
 
 `src/ui/legend.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import { EVIDENCE_INTENTS, evidenceLabel } from '../state/colors.js';
-import type { Selectors } from '../state/selectors.js';
+import { clear, el } from './dom.ts';
+import { EVIDENCE_INTENTS, evidenceLabel } from '../state/colors.ts';
+import type { Selectors } from '../state/selectors.ts';
 
 const INTENT_LABEL: Record<string, string> = {
   OBSERVED: 'observado',
@@ -9645,11 +9649,11 @@ git commit -m "feat(web): build the shell header breadcrumb status badge and leg
 `apps/web/src/ui/scaleControls.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { renderScale } from './scaleControls.js';
-import { buildSelectors } from '../state/selectors.js';
-import { createInitialState, createStore } from '../state/store.js';
+import { renderScale } from './scaleControls.ts';
+import { buildSelectors } from '../state/selectors.ts';
+import { createInitialState, createStore } from '../state/store.ts';
 import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
-import { LEVEL_ORDER } from '../state/geo.js';
+import { LEVEL_ORDER } from '../state/geo.ts';
 
 function state() {
   const store = createStore(createInitialState());
@@ -9701,11 +9705,11 @@ describe('renderScale', () => {
 `apps/web/src/ui/rail.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createRail, renderRail } from './rail.js';
-import { createShell } from './shell.js';
-import { createHeader } from './header.js';
-import { buildSelectors } from '../state/selectors.js';
-import { createInitialState, createStore } from '../state/store.js';
+import { createRail, renderRail } from './rail.ts';
+import { createShell } from './shell.ts';
+import { createHeader } from './header.ts';
+import { buildSelectors } from '../state/selectors.ts';
+import { createInitialState, createStore } from '../state/store.ts';
 import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
 import { projectTypeSchema } from '@atlas/contracts';
 
@@ -9782,18 +9786,18 @@ describe('rail', () => {
 - [ ] **Step 2: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/ui/rail.test.ts apps/web/src/ui/scaleControls.test.ts`
-Expected: FAIL — `Failed to resolve import "./scaleControls.js"` and `"./rail.js"`.
+Expected: FAIL — `Failed to resolve import "./scaleControls.ts"` and `"./rail.ts"`.
 
 - [ ] **Step 3: Implement `src/ui/scaleControls.ts` and `src/ui/rail.ts`**
 
 `src/ui/scaleControls.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import { levelLabel } from '../state/colors.js';
-import { LEVEL_ORDER } from '../state/geo.js';
-import type { AtlasState } from '../state/store.js';
-import type { Selectors } from '../state/selectors.js';
-import type { LocationLevel } from '../data/types.js';
+import { clear, el } from './dom.ts';
+import { levelLabel } from '../state/colors.ts';
+import { LEVEL_ORDER } from '../state/geo.ts';
+import type { AtlasState } from '../state/store.ts';
+import type { Selectors } from '../state/selectors.ts';
+import type { LocationLevel } from '../data/types.ts';
 
 export function renderScale(
   node: HTMLElement,
@@ -9828,14 +9832,14 @@ export function renderScale(
 
 `src/ui/rail.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import { evidenceLabel, statusLabel, typeLabel } from '../state/colors.js';
-import { renderLegend } from './legend.js';
-import { renderScale } from './scaleControls.js';
-import { activeFilterCount } from '../state/filters.js';
-import type { AtlasState } from '../state/store.js';
-import type { Selectors } from '../state/selectors.js';
-import type { EvidenceLevel, LocationLevel, ProjectStatus, ProjectType } from '../data/types.js';
+import { clear, el } from './dom.ts';
+import { evidenceLabel, statusLabel, typeLabel } from '../state/colors.ts';
+import { renderLegend } from './legend.ts';
+import { renderScale } from './scaleControls.ts';
+import { activeFilterCount } from '../state/filters.ts';
+import type { AtlasState } from '../state/store.ts';
+import type { Selectors } from '../state/selectors.ts';
+import type { EvidenceLevel, LocationLevel, ProjectStatus, ProjectType } from '../data/types.ts';
 import { evidenceSchema, projectStatusSchema, projectTypeSchema } from '@atlas/contracts';
 
 export interface RailHandlers {
@@ -9977,8 +9981,8 @@ Expected: PASS, 7 files / 25 tests.
 `apps/web/src/ui/drawer.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createDrawer, renderDrawer } from './drawer.js';
-import { createShell } from './shell.js';
+import { createDrawer, renderDrawer } from './drawer.ts';
+import { createShell } from './shell.ts';
 import { projectDetailFixture } from '../testing/fixtures.ts';
 
 function setup() {
@@ -10083,10 +10087,10 @@ describe('drawer', () => {
 `apps/web/src/ui/strip.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createStrip, renderStrip } from './strip.js';
-import { createShell } from './shell.js';
-import { buildSelectors } from '../state/selectors.js';
-import { createInitialState, createStore } from '../state/store.js';
+import { createStrip, renderStrip } from './strip.ts';
+import { createShell } from './shell.ts';
+import { buildSelectors } from '../state/selectors.ts';
+import { createInitialState, createStore } from '../state/store.ts';
 import { atlasDataFixture, eventsFixture, listBodies } from '../testing/fixtures.ts';
 
 function loaded() {
@@ -10167,18 +10171,18 @@ describe('strip', () => {
 - [ ] **Step 6: Run them and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/ui/drawer.test.ts apps/web/src/ui/strip.test.ts`
-Expected: FAIL — `Failed to resolve import "./drawer.js"` and `"./strip.js"`.
+Expected: FAIL — `Failed to resolve import "./drawer.ts"` and `"./strip.ts"`.
 
 - [ ] **Step 7: Implement `src/ui/drawer.ts` and `src/ui/strip.ts`**
 
 `src/ui/drawer.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import { icon } from './icons.js';
-import { safeExternalUrl } from '../data/urls.js';
-import { evidenceLabel, evidenceIntent, statusLabel, typeLabel } from '../state/colors.js';
-import { sortSources, sortTimelineEvents } from '../data/normalize.js';
-import type { ProjectDetail } from '../data/types.js';
+import { clear, el } from './dom.ts';
+import { icon } from './icons.ts';
+import { safeExternalUrl } from '../data/urls.ts';
+import { evidenceLabel, evidenceIntent, statusLabel, typeLabel } from '../state/colors.ts';
+import { sortSources, sortTimelineEvents } from '../data/normalize.ts';
+import type { ProjectDetail } from '../data/types.ts';
 
 export interface DrawerHandlers {
   onClose: () => void;
@@ -10335,12 +10339,12 @@ export function renderDrawer(
 
 `src/ui/strip.ts`:
 ```ts
-import { clear, el } from './dom.js';
-import { icon } from './icons.js';
-import { eventsInYear } from '../state/timeline.js';
-import type { AtlasState } from '../state/store.js';
-import type { Selectors } from '../state/selectors.js';
-import type { EventRecord } from '../data/types.js';
+import { clear, el } from './dom.ts';
+import { icon } from './icons.ts';
+import { eventsInYear } from '../state/timeline.ts';
+import type { AtlasState } from '../state/store.ts';
+import type { Selectors } from '../state/selectors.ts';
+import type { EventRecord } from '../data/types.ts';
 
 export interface StripHandlers {
   onYear: (year: number) => void;
@@ -10573,10 +10577,10 @@ git commit -m "feat(web): add rail scale controls drawer with safe sources and t
 `apps/web/src/app/dataController.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { createDataController } from './dataController.js';
-import { createApiClient } from '../data/client.js';
-import { createStore, createInitialState } from '../state/store.js';
-import { buildQueryString } from '../data/query.js';
+import { createDataController } from './dataController.ts';
+import { createApiClient } from '../data/client.ts';
+import { createStore, createInitialState } from '../state/store.ts';
+import { buildQueryString } from '../data/query.ts';
 import { listBodies, atlasDataFixture } from '../testing/fixtures.ts';
 
 function harness() {
@@ -10674,15 +10678,15 @@ describe('data controller', () => {
 - [ ] **Step 2: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/app/dataController.test.ts`
-Expected: FAIL — `Failed to resolve import "./dataController.js"`.
+Expected: FAIL — `Failed to resolve import "./dataController.ts"`.
 
 - [ ] **Step 3: Implement `src/app/dataController.ts`**
 
 ```ts
-import { buildQueryString } from '../data/query.js';
-import { toQuery } from '../state/filters.js';
-import type { ApiClient } from '../data/client.js';
-import type { Store } from '../state/store.js';
+import { buildQueryString } from '../data/query.ts';
+import { toQuery } from '../state/filters.ts';
+import type { ApiClient } from '../data/client.ts';
+import type { Store } from '../state/store.ts';
 
 export interface DataControllerOptions {
   client: ApiClient;
@@ -10810,9 +10814,9 @@ Expected: PASS, 6 tests.
 `apps/web/src/app/boot.test.ts`:
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import { boot } from './boot.js';
-import type { MapAdapter } from './dataController.js';
-import { createApiClient } from '../data/client.js';
+import { boot } from './boot.ts';
+import type { MapAdapter } from './dataController.ts';
+import { createApiClient } from '../data/client.ts';
 import { listBodies, atlasDataFixture, projectDetailFixture } from '../testing/fixtures.ts';
 
 function fakeAdapter(): MapAdapter & { setClusters: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> } {
@@ -10930,28 +10934,28 @@ describe('boot', () => {
 - [ ] **Step 6: Run it and confirm failure**
 
 Run: `npx vitest run --project web apps/web/src/app/boot.test.ts`
-Expected: FAIL — `Failed to resolve import "./boot.js"`.
+Expected: FAIL — `Failed to resolve import "./boot.ts"`.
 
 - [ ] **Step 7: Implement `src/app/boot.ts`**
 
 ```ts
-import { diagnoseMapEnvironment } from '../map/diagnostics.js';
-import { createFallbackAdapter } from '../map/fallback.js';
-import { createGlobeAdapter } from '../map/globe.js';
-import { buildSelectors } from '../state/selectors.js';
-import { createDrawer, renderDrawer } from '../ui/drawer.js';
-import { createHeader } from '../ui/header.js';
-import { createRail, renderRail } from '../ui/rail.js';
-import { createShell } from '../ui/shell.js';
-import { createStrip, renderStrip } from '../ui/strip.js';
-import { renderStatusBadge } from '../ui/statusBadge.js';
-import { clear, el } from '../ui/dom.js';
-import { createDataController } from './dataController.js';
-import { createInitialState, createStore } from '../state/store.js';
-import type { ApiClient } from '../data/client.js';
-import type { Cluster } from '../state/selectors.js';
-import type { MapDiagnostics } from '../map/diagnostics.js';
-import type { Store } from '../state/store.js';
+import { diagnoseMapEnvironment } from '../map/diagnostics.ts';
+import { createFallbackAdapter } from '../map/fallback.ts';
+import { createGlobeAdapter } from '../map/globe.ts';
+import { buildSelectors } from '../state/selectors.ts';
+import { createDrawer, renderDrawer } from '../ui/drawer.ts';
+import { createHeader } from '../ui/header.ts';
+import { createRail, renderRail } from '../ui/rail.ts';
+import { createShell } from '../ui/shell.ts';
+import { createStrip, renderStrip } from '../ui/strip.ts';
+import { renderStatusBadge } from '../ui/statusBadge.ts';
+import { clear, el } from '../ui/dom.ts';
+import { createDataController } from './dataController.ts';
+import { createInitialState, createStore } from '../state/store.ts';
+import type { ApiClient } from '../data/client.ts';
+import type { Cluster } from '../state/selectors.ts';
+import type { MapDiagnostics } from '../map/diagnostics.ts';
+import type { Store } from '../state/store.ts';
 
 export interface MapAdapter {
   setClusters(clusters: Cluster[]): void;
@@ -11227,9 +11231,9 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/components.css';
 
-import { boot } from './app/boot.js';
-import { createApiClient } from './data/client.js';
-import { el } from './ui/dom.js';
+import { boot } from './app/boot.ts';
+import { createApiClient } from './data/client.ts';
+import { el } from './ui/dom.ts';
 
 function readFlag(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -11382,12 +11386,12 @@ The API runs with `ATLAS_REPOS=memory`, so the E2E suite needs no database. Real
 import 'dotenv/config';
 import { buildApp } from './app.ts';
 import { loadEnv } from './config/env.ts';
-import { createLogger } from './config/logger.js';
-import { createPool, closePool } from './db/pool.js';
-import { createPgRepositories } from './repositories/pg/index.js';
+import { createLogger } from './config/logger.ts';
+import { createPool, closePool } from './db/pool.ts';
+import { createPgRepositories } from './repositories/pg/index.ts';
 import { createFakeRepositories } from './repositories/fake.ts';
 import { atlasDataFixture } from './testing/fixtures.ts';
-import type { AtlasRepositories } from './repositories/types.js';
+import type { AtlasRepositories } from './repositories/types.ts';
 
 const env = loadEnv();
 const logger = createLogger(env.logLevel);
@@ -11476,7 +11480,7 @@ export async function matchingCountText(page: Page): Promise<string> {
 `apps/web/e2e/atlas.spec.ts`:
 ```ts
 import { expect, test } from '@playwright/test';
-import { expectStatus, gotoAtlas, matchingCountText, openProject, projectCount } from './helpers.js';
+import { expectStatus, gotoAtlas, matchingCountText, openProject, projectCount } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
   await gotoAtlas(page);
@@ -11576,7 +11580,7 @@ test('has no detectable accessibility violations with the drawer open', async ({
 `apps/web/e2e/fallback.spec.ts`:
 ```ts
 import { expect, test } from '@playwright/test';
-import { expectStatus, gotoAtlas, openProject, projectCount } from './helpers.js';
+import { expectStatus, gotoAtlas, openProject, projectCount } from './helpers.ts';
 
 test.use({ reducedMotion: 'no-preference' });
 
