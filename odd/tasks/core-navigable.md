@@ -126,7 +126,7 @@ slot; nothing runs on its own.
 | 12 | Derived view state and accent normalisation | 3 | done (`5e44a20`) |
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | done (`49446ce`) |
 | 14 | Data-only fallback map and diagnostics banner | 3 | done (`bfe82d3`) |
-| 15 | Shell, header, breadcrumb, status badge, legend | 3 | pending |
+| 15 | Shell, header, breadcrumb, status badge, legend | 3 | done (`195b926`) |
 | 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | pending |
 | 17 | Data controller, bootstrap and entry point | 4 | pending |
 | 18 | End-to-end suite with Playwright | 5 | pending |
@@ -460,6 +460,26 @@ fails on missing `/src/main.ts` (Task 17). No new failures.
 falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
 
 **Mutation evidence:** revertir `addEventListener` rompe test de selección; revertir `markerLayer` rompe test de graticule + markers; revertir plan test-count produce mismatch.
+
+### 2026-10-03 — Task 15 closed as `195b926`
+
+`feat(web): build the shell header breadcrumb status badge and legend`, 9 files
+(shell, header, breadcrumb, statusBadge, legend + 4 tests), +780/−5 (net +775).
+No AI attribution.
+
+**Plan defects corrected (6):**
+1. `el()` no soporta `onClick` → `addEventListener` (header.ts: railToggle, searchInput).
+2. Test count Step 8: "17 tests" → "18 tests" (3 shell + 7 header/breadcrumb + 4 statusBadge + 4 legend).
+3. `EVIDENCE_INTENTS` import desde `@atlas/contracts` (no `../state/colors.ts`).
+4. `Location` type no tiene `center` → breadcrumb usa `longitude`/`latitude` (schema).
+5. `shell.test.ts`: `isConnected` en jsdom → `parentElement` (árbol desprendido).
+6. Breadcrumb XSS test (P0): `<img src=x onerror=alert(1)>` → texto seguro, no HTML.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **269 passed | 19 skipped** (baseline 251 → +18). `npm run build`
+falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
+
+**Mutation evidence:** revertir `addEventListener` en header rompe test de búsqueda y toggle rail; revertir `firstLine()` en statusBadge rompe test "never renders a stack trace"; revertir plan test-count produce mismatch.
 
 ### Lessons — the subagent report is not the evidence
 
