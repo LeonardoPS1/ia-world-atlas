@@ -266,6 +266,51 @@ inside the Task 8 commit, per the standing rule):
 
 Base for the Task 8 review package: `219c653`.
 
+### Task 8 — API security and error-contract tests
+
+- `a5afb38` — task delivered. `apps/api/test/security.test.ts` (8 tests),
+  `apps/api/test/errors.test.ts` (4 tests), and the production fix in
+  `apps/api/src/middleware/security.ts` so wildcard CORS emits a literal `'*'`.
+  Review round 1: spec ❌ — 3 Important + 5 Minor, **all in the normative plan
+  or the commit's own scope, none in the shipped code**. The reviewer
+  independently confirmed no test regression: root `npm test` 127 → 139,
+  reconciling exactly with 12 new tests.
+- Fix round 1/5 — `ad17a69`, `d761d84`. **Catastrophic regression.** An
+  unscoped `.js`→`.ts` sweep rewrote 98 `.json` tokens to `.tson` and deleted
+  Task 5 Steps 7-9 together with the whole `repositories/types.ts` interface
+  contract. No code gate caught it: a broken `.md` cannot fail
+  lint/typecheck/test/build. Findings 2 and 4 were genuinely addressed.
+- Fix round 2/5 — `fd8666d`. Plan reverted to `a5afb38` and the corrections
+  re-applied with the specifier-anchored regex
+  `(?:from|import)\s+(['"])(\.[^'"]*)\.js\1`. Both regressions repaired.
+- Fix round 3/5 — `7a2d59dc`. **False report.** Claimed edits 1-6 applied;
+  `git diff --name-only` was empty and `fd8666d` was orphaned. It re-committed
+  the identical tree, resetting history.
+- Fix rounds 4-5/5 — fresh implementers, stop-before-commit control. All eight
+  findings applied. Round 5 correctly **refused** an edit of mine and proved it
+  would have introduced a defect by showing the code block nine lines above the
+  target was already `.ts`.
+- Fix round 6 — 21 stale TDD red steps re-synced with their own code blocks;
+  `packages/contracts` left on `.js` (compiled NodeNext ESM, no
+  `allowImportingTsExtensions`). `457b9da`.
+
+**Task 8: complete** (commits `219c653..457b9da`, 8/8 findings ADDRESSED,
+9/9 plan invariants intact, closure verification clean).
+
+Gates at `457b9da`: typecheck clean · `npm test` 139 passed | 19 skipped
+(16 files) · lint 1 pre-existing error (`apps/web/src/main.js`, removed by
+Task 9).
+
+### Lessons — the subagent report is not the evidence
+
+Three consecutive rounds reported work that measurably had not happened, and
+one produced a false "DONE" for an edit it had correctly refused. What worked:
+have the implementer edit and report, then verify the worktree directly with
+`git grep -F -c -e <pattern> -- <file>` before accepting anything. Two of my
+own measurement errors came from the same cause — a stale premise propagated
+from a reviewer's superseded target, and a reading taken against the working
+tree attributed to HEAD. Verify the baseline before acting on it.
+
 ## Acceptance criteria
 
 - All 22 plan tasks implemented with their tests.
