@@ -192,3 +192,16 @@ export function paginatedSchema<T extends z.ZodTypeAny>(item: T): z.ZodType<Pagi
     totalPages: z.number().int().nonnegative(),
   });
 }
+
+export const projectListResponseSchema = paginatedSchema(projectSummarySchema);
+export const locationListResponseSchema = paginatedSchema(locationSchema);
+
+export const eventListResponseSchema = z.object({
+  data: z.array(eventSchema),
+  count: z.number().int().nonnegative(),
+});
+
+export const relationListResponseSchema = z.object({
+  data: z.array(relationSchema),
+  count: z.number().int().nonnegative(),
+});

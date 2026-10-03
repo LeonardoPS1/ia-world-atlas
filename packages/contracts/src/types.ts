@@ -1,12 +1,16 @@
 import type { z } from 'zod';
 import type {
   apiErrorSchema,
+  eventListResponseSchema,
   eventSchema,
   healthResponseSchema,
   impactRecordSchema,
+  locationListResponseSchema,
   locationSchema,
   projectDetailSchema,
+  projectListResponseSchema,
   projectSummarySchema,
+  relationListResponseSchema,
   relationSchema,
   sourceSchema,
   statsResponseSchema,
@@ -45,6 +49,10 @@ export type ProjectDetail = z.infer<typeof projectDetailSchema>;
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
+export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
+export type LocationListResponse = z.infer<typeof locationListResponseSchema>;
+export type EventListResponse = z.infer<typeof eventListResponseSchema>;
+export type RelationListResponse = z.infer<typeof relationListResponseSchema>;
 
 export interface Paginated<T> {
   data: T[];

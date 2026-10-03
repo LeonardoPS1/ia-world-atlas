@@ -6617,7 +6617,7 @@ Constraints that the E2E suite in Task 22 relies on and that must hold in the co
 - [ ] **Step 9: Run the web data tests and confirm they pass**
 
 Run: `npx vitest run --project web apps/web/src/data`
-Expected: PASS, 2 files / 14 tests.
+Expected: PASS, 3 files / 19 tests.
 
 - [ ] **Step 10: Run lint and typecheck for the web workspace**
 
