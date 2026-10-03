@@ -10687,13 +10687,18 @@ function harness() {
 }
 
 describe('data controller', () => {
-  it('loads locations, projects, events, relations and stats on the first refresh', async () => {
+  it('loads locations, projects, events and stats on the first refresh', async () => {
     const { controller, store, urls } = harness();
     await controller.refresh();
     expect(urls.some((u) => u.includes('/locations'))).toBe(true);
     expect(urls.some((u) => u.includes('/projects?'))).toBe(true);
     expect(urls.some((u) => u.includes('/events'))).toBe(true);
-    expect(urls.some((u) => u.includes('/relations'))).toBe(true);
+    // /relations requires a projectId; with no selection the controller must
+    // not call it at all (the API answers 400 and would abort the whole load).
+    // The earlier version of this assertion demanded the call while the
+    // implementation above never made it — an impossible pair that pushed the
+    // implementer to add a request the real API rejects. Fixed 2026-10-03.
+    expect(urls.some((u) => u.includes('/relations'))).toBe(false);
     expect(urls.some((u) => u.includes('/stats'))).toBe(true);
     const state = store.getState();
     expect(state.locations.data).toHaveLength(11);

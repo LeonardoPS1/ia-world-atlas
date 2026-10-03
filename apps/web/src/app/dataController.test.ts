@@ -10,6 +10,15 @@ function harness() {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     urls.push(url);
+    // The real API requires a projectId on /relations and answers 400 without
+    // one. Modelling that here is what makes the first-refresh test able to
+    // fail if the controller ever calls /relations without a selection again.
+    if (url.includes('/relations') && !/[?&]projectId=[^&]/.test(url)) {
+      return new Response(
+        JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'projectId is required', details: [], requestId: 'req-relations' } }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      );
+    }
     const body = url.includes('/projects?')
       ? listBodies.projects
       : url.includes('/projects')
@@ -32,13 +41,15 @@ function harness() {
 }
 
 describe('data controller', () => {
-  it('loads locations, projects, events, relations and stats on the first refresh', async () => {
+  it('loads locations, projects, events and stats on the first refresh', async () => {
     const { controller, store, urls } = harness();
     await controller.refresh();
     expect(urls.some((u) => u.includes('/locations'))).toBe(true);
     expect(urls.some((u) => u.includes('/projects?'))).toBe(true);
     expect(urls.some((u) => u.includes('/events'))).toBe(true);
-    expect(urls.some((u) => u.includes('/relations'))).toBe(true);
+    // /relations requires a projectId; with no selection the controller must
+    // not call it at all (the API answers 400 and would abort the whole load).
+    expect(urls.some((u) => u.includes('/relations'))).toBe(false);
     expect(urls.some((u) => u.includes('/stats'))).toBe(true);
     const state = store.getState();
     expect(state.locations.data).toHaveLength(11);

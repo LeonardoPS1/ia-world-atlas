@@ -51,17 +51,18 @@ export function createDataController(options: DataControllerOptions) {
     if (focusLocationId) listQuery.locationId = focusLocationId;
 
     try {
-      const [locations, projects, _relations] = await Promise.all([
-        client.locations({ ...(level ? { level } : {}), }, controller.signal),
+      const [locations, projects] = await Promise.all([
+        client.locations({ ...(level ? { level } : {}) }, controller.signal),
         client.projects({ ...listQuery }, controller.signal),
-        client.relations(selectedProjectId ?? '', controller.signal),
       ]);
       store.dispatch({ type: 'data/locations', payload: locations });
       store.dispatch({
         type: 'data/projects',
         payload: { data: projects.data, page: projects.page, pageSize: projects.pageSize, total: projects.total, totalPages: projects.totalPages },
       });
-      // Relations are fetched but not stored in state for now (no action for it)
+      // Relations are intentionally not fetched here: the API requires a
+      // projectId and answers 400 without one, and the response is not stored
+      // in state yet. Fetching them per selected project is a separate change.
     } catch (error) {
       if ((error as { name?: string }).name === 'AbortError') return;
       store.dispatch({ type: 'data/error', detail: errorDetail(error) });

@@ -110,6 +110,41 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
   markerLayer.className = 'atlas-markers';
   markerLayer.setAttribute('data-testid', 'marker-layer');
 
+  // The adapter must be declared BEFORE the promise below: the `load` handler
+  // calls `resolve(adapter)`, so a later declaration would sit in the temporal
+  // dead zone and the promise would never settle.
+  const adapter: MapAdapter = {
+    setClusters(next) {
+      clusters = next;
+      selectedId = next.length === 1 ? next[0]?.locationId ?? null : null;
+      renderMarkers();
+    },
+    setSelected(id) {
+      selectedId = id;
+      renderMarkers();
+    },
+    focus(id) {
+      const cluster = clusters.find((c) => c.locationId === id);
+      if (cluster) {
+        selectedId = id;
+        map?.easeTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(cluster.level === 'LOCAL_AREA' ? 11 : 6, 4), duration: reducedMotion ? 0 : 420 });
+        renderMarkers();
+      }
+    },
+    setMode(m) {
+      _currentMode = m;
+    },
+    destroy() {
+      for (const node of markers.values()) node.remove();
+      markers.clear();
+      markerLayer?.remove();
+      markerLayer = null;
+      map?.off('click' as never);
+      map?.remove();
+      map = null;
+    },
+  };
+
   return new Promise<MapAdapter>((resolve, reject) => {
     try {
       map = new MapCtor({
@@ -142,36 +177,4 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
       reject(payload.error ?? new Error('style error'));
     }) as never);
   });
-
-  const adapter: MapAdapter = {
-    setClusters(next) {
-      clusters = next;
-      selectedId = next.length === 1 ? next[0]?.locationId ?? null : null;
-      renderMarkers();
-    },
-    setSelected(id) {
-      selectedId = id;
-      renderMarkers();
-    },
-    focus(id) {
-      const cluster = clusters.find((c) => c.locationId === id);
-      if (cluster) {
-        selectedId = id;
-        map?.easeTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(cluster.level === 'LOCAL_AREA' ? 11 : 6, 4), duration: reducedMotion ? 0 : 420 });
-        renderMarkers();
-      }
-    },
-    setMode(m) {
-      _currentMode = m;
-    },
-    destroy() {
-      for (const node of markers.values()) node.remove();
-      markers.clear();
-      markerLayer?.remove();
-      markerLayer = null;
-      map?.off('click' as never);
-      map?.remove();
-      map = null;
-    },
-  };
 }
