@@ -119,8 +119,8 @@ slot; nothing runs on its own.
 | 5 | API core — env, errors, middleware, app factory, health, in-memory double | 1 | done (`1e24f20`, `9ebdd01`) |
 | 6 | PostgreSQL repositories | 1 | done (`0149f65`) |
 | 7 | Query contracts and read-only routes | 2 | done (`219c653`) |
-| 8 | API security and error-contract tests | 2 | pending — next; plan lines 4921–5117 |
-| 9 | Design tokens, base styles, safe DOM primitives, inline icons | 3 | pending |
+| 8 | API security and error-contract tests | 2 | done (`457b9da`, ledger closure `0249ac5`) |
+| 9 | Design tokens, base styles, safe DOM primitives, inline icons | 3 | done (`8755b4b`) |
 | 10 | Typed API client with runtime contract validation | 3 | pending |
 | 11 | Application state, semantic colour mapping, selection rules | 3 | pending |
 | 12 | Derived view state and accent normalisation | 3 | pending |
@@ -300,6 +300,33 @@ Base for the Task 8 review package: `219c653`.
 Gates at `457b9da`: typecheck clean · `npm test` 139 passed | 19 skipped
 (16 files) · lint 1 pre-existing error (`apps/web/src/main.js`, removed by
 Task 9).
+
+### 2026-10-03 — Task 9 closed as `8755b4b`
+
+`feat(web): add design tokens base styles safe dom primitives and icons`, 14 files,
++1210/−205 (net +1005). No AI attribution.
+
+**Two pre-verified plan defects corrected in the same commit:**
+1. Step 1 `dom.test.ts`: `expect(node.getAttribute('aria-hidden')).toBe('true')`
+   → `expect(node.hasAttribute('aria-hidden')).toBe(true); expect(node.getAttribute('aria-hidden')).toBe('')`
+   (implementation correctly sets boolean attributes to empty string).
+2. Steps 7 and 10 test counts: "10 tests" → "11 tests" (actual: 5+4+2=11).
+
+**Implementation note:** `dom.ts`, `urls.ts`, `icons.ts` already existed in the repo
+from a prior partial pass, so Step 2's expected import failure did not occur —
+all tests passed immediately. No code change was needed for the core modules.
+The four CSS files and three test files were created from scratch.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors** (was 1, the
+legacy `main.js` parse error). `npm test` **150 passed | 19 skipped** (18 files
+passed, 1 skipped) — baseline was 139, so +11 from the new web unit tests,
+no regressions; the 19 skips remain `pg.integration.test.ts` without
+`TEST_DATABASE_URL`. `npm run build` still fails on `apps/web/index.html`
+requesting `/src/main.ts` (Task 17). No new failures added to any gate.
+
+**Mutation evidence:** reverting the aria-hidden test assertion to the plan's
+original `'true'` fails the test; reverting the test-count lines in the plan
+produces a mismatch. Both reverted.
 
 ### Lessons — the subagent report is not the evidence
 
