@@ -121,7 +121,7 @@ slot; nothing runs on its own.
 | 7 | Query contracts and read-only routes | 2 | done (`219c653`) |
 | 8 | API security and error-contract tests | 2 | done (`457b9da`, ledger closure `0249ac5`) |
 | 9 | Design tokens, base styles, safe DOM primitives, inline icons | 3 | done (`8755b4b`) |
-| 10 | Typed API client with runtime contract validation | 3 | pending |
+| 10 | Typed API client with runtime contract validation | 3 | done (`46aa6de`) |
 | 11 | Application state, semantic colour mapping, selection rules | 3 | pending |
 | 12 | Derived view state and accent normalisation | 3 | pending |
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | pending |
@@ -327,6 +327,45 @@ requesting `/src/main.ts` (Task 17). No new failures added to any gate.
 **Mutation evidence:** reverting the aria-hidden test assertion to the plan's
 original `'true'` fails the test; reverting the test-count lines in the plan
 produces a mismatch. Both reverted.
+
+### 2026-10-03 — Task 10 closed as `46aa6de`
+
+`feat(web): add typed api client that validates every payload at runtime`, 10 files,
++1170/−5 (net +1165). No AI attribution.
+
+**Plan defect corrected (Defect 1 — contracts package):**
+The plan's `client.ts` and `client.test.ts` imported 4 paginated response schemas
+from `@atlas/contracts` that did not exist. Added to `packages/contracts`:
+- `schemas.ts`: `projectListResponseSchema`, `locationListResponseSchema` (via
+  `paginatedSchema`), `eventListResponseSchema`, `relationListResponseSchema`
+  (bare `{ data: T[]; count: number }`).
+- `types.ts`: inferred types `ProjectListResponse`, `LocationListResponse`,
+  `EventListResponse`, `RelationListResponse`.
+- `index.ts`: already re-exports all via `export *` / `export type *` — no change.
+
+**Plan defect corrected (Step 9 test count):**
+Plan said "14 tests" (2 files). Actual: `query.test.ts` (6) + `urls.test.ts` (4)
++ `client.test.ts` (9, not 8) = 19 tests / 3 files. Corrected plan line 6620.
+
+**Implementation notes:**
+- `client.ts` project endpoint validates ID matches request (throws
+  `ContractError` if mismatch) — satisfies test that feeds wrong-ID fixture.
+- `types.ts` adds local aliases (`Project = ProjectSummary`, `EventRecord = Event`,
+  `RelationRecord = Relation`, `EvidenceIntent = EvidenceLevel`, `EventKind = string`)
+  because contracts doesn't export these names.
+- Fixtures: copied verbatim from API Task 5; `projectDetailFixture` rebuilt from
+  Chile project (not `projectsFixture[0]`), `sourcesFor` reads `source.projectId`
+  from nested `Source` array, added missing `geometrySource: 'project'`.
+- Query test: fixed `'politica'` typo → `'política'` so `encodeURIComponent`
+  expectation matches.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **165 passed | 19 skipped** (baseline 150 → +15, plan expected +14
+due to 8-vs-9 client test count). `npm run build` still fails on missing
+`/src/main.ts` (Task 17). No new failures.
+
+**Mutation evidence:** reverting any of the 4 contracts schemas breaks typecheck
+and client tests. Reverting the plan test-count line produces a mismatch.
 
 ### Lessons — the subagent report is not the evidence
 
