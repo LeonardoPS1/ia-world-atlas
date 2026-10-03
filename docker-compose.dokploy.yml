@@ -1,0 +1,72 @@
+# Production stack for Dokploy (single Compose application).
+#
+# Three services: an internal PostGIS database, the read-only API, and the
+# static web image served by nginx. Only `web` joins the external
+# `dokploy-network` so Dokploy's Traefik can route the public domain to it;
+# `web` proxies `/api/` to `api` over the internal network, so the browser
+# talks to a single origin and CORS never applies.
+#
+# Dokploy injects the Traefik router/service labels into the `web` service from
+# the domain record attached to this Compose app. Do not publish host ports
+# here: TLS and ingress are Traefik's job.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - atlas-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: '8787'
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "node apps/api/dist/db/migrate-cli.js && node apps/api/dist/server.js"
+    networks:
+      - internal
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-}
+        VITE_MAPBOX_STYLE: ${VITE_MAPBOX_STYLE:-mapbox://styles/mapbox/dark-v11}
+        VITE_ALLOW_HTTP_SOURCES: ${VITE_ALLOW_HTTP_SOURCES:-false}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - internal
+      - dokploy-network
+    restart: unless-stopped
+
+networks:
+  internal:
+  dokploy-network:
+    external: true
+
+volumes:
+  atlas-db:
