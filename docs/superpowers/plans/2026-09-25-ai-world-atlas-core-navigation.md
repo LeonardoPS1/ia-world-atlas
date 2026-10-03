@@ -11722,6 +11722,8 @@ git commit -m "test(web): add playwright e2e suite for map drawer filters timeli
 
 Docker is not installed on the authoring machine, so this task cannot be verified locally. Step 8 makes CI the verification point; do not claim the stack works before that job is green.
 
+> **Superseded on 2026-10-03.** The stack was built and deployed for real to the VPS and Dokploy, and verified end to end. See "Addendum — Task 19 deployed to Dokploy (2026-10-03)" at the end of this plan. The CI verification point (Task 21) is still pending.
+
 - [ ] **Step 1: Write `.dockerignore` at the repository root**
 
 ```
@@ -11981,7 +11983,7 @@ services:
     restart: unless-stopped
 ```
 
-Every variable that is a production requirement uses `${VAR:?message}` rather than a default, so a missing value fails at parse time with a readable message instead of producing a container that boots and serves 500s. This file is **prepared, not deployed**: nothing in this delivery touches Dokploy.
+Every variable that is a production requirement uses `${VAR:?message}` rather than a default, so a missing value fails at parse time with a readable message instead of producing a container that boots and serves 500s. This file was originally **prepared, not deployed**: nothing in the original delivery touched Dokploy. **Superseded on 2026-10-03:** the stack now runs on Dokploy; see the addendum at the end of this plan.
 
 - [ ] **Step 10: Commit**
 
@@ -12600,7 +12602,7 @@ Report, in this order and without embellishment:
 5. What V1 deliberately does not contain, so nothing looks accidentally missing: news ingestion, admin and auth, the visual graph, My Atlas, AI Pulse, AI Stack, AI Invisible, Future Radar, Story Mode and the comparator.
 6. The two spec corrections, and the fact that the PDF now matches the markdown.
 
-Do not claim the deployment exists. Nothing was deployed to Dokploy in this delivery.
+Do not claim the deployment exists. Nothing was deployed to Dokploy in this delivery. **Superseded on 2026-10-03:** the deployment now exists and was verified end to end; see the addendum at the end of this plan.
 
 - [ ] **Step 8: Final gate re-run, so the last word is evidence**
 
@@ -12659,3 +12661,51 @@ shape is a check whose failure mode is silence. Any new verification step in thi
 be asked one question before it is trusted: **what does this report when it does not run?**
 A step that reports success, or a suspiciously total result, when it did not execute is worse
 than no step, because it converts an unknown into a false negative.
+
+---
+
+## Addendum — Task 19 deployed to Dokploy (2026-10-03)
+
+Task 19 was originally scoped as "prepared, not deployed". That scope was superseded: on 2026-10-03 the stack was deployed for real to the VPS and Dokploy and verified end to end. This addendum is the normative record of that deployment.
+
+**Target**
+
+- VPS `51.222.207.250`, Dokploy v0.30.8 (Swarm service, port 3000), Traefik v3.6.7.
+- Dokploy project `ia-world-atlas` (`RW46AY-Bbx7M23PoR3EUE`), environment `production` (`SzrJQZmxCatpbTodS-6WN`).
+- Compose app: composeId `8tvgc5hay7sLqMQIEtNYa`, appName `iaworldatlas-ke469u`.
+- Source: `https://github.com/LeonardoPS1/ia-world-atlas`, branch `core-navigable`, composePath `./docker-compose.dokploy.yml`.
+- Domain: `atlasia.aicorebots.com` (domainId `l0Q9xS_gGvyqEtbOXYAmv`, serviceName `web`, port 80, domainType `compose`, certificateType `letsencrypt`, uniqueConfigKey 45).
+
+**Stack**
+
+`docker-compose.dokploy.yml` deploys three containers under Docker Compose (not Swarm): `db` (`postgis/postgis:16-3.4`), `api` (`apps/api/Dockerfile`, non-root), `web` (`apps/web/Dockerfile`, nginx). Only `web` joins the external overlay `dokploy-network` so Traefik can route it; `api` and `db` stay on the internal bridge network. `web` proxies `/api/` to `api:8787`, so the public surface is same-origin and CORS is a non-issue. No host ports are published; Traefik terminates TLS.
+
+**Dokploy-injected routing (verified on the running container)**
+
+`traefik.enable=true`, `traefik.docker.network=dokploy-network`, router `iaworldatlas-ke469u-45-web` (entrypoints `web`, middleware `redirect-to-https@file`, rule ``Host(`atlasia.aicorebots.com`)``), router `iaworldatlas-ke469u-45-websecure` (entrypoints `websecure`, `tls.certresolver=letsencrypt`), both services `loadbalancer.server.port=80`.
+
+**Defect found and fixed during deployment**
+
+The runtime stage of `apps/api/Dockerfile` copied `apps/api/migrations` but not `apps/api/seeds`, so the seed CLI failed with `ENOENT ... /app/apps/api/seeds/001_core_seed.sql` and the database stayed empty. Fixed in commit `e789ecc` (`fix(docker): ship the seed SQL and seed the stack on start`): the Dockerfile now copies `apps/api/seeds`, and both `docker-compose.yml` and `docker-compose.dokploy.yml` run `migrate-cli.js && seed-cli.js && server.js` on start. The seed is idempotent (`on conflict (id) do update`), so re-seeding on every boot is safe.
+
+**Verification (2026-10-03, after redeploy)**
+
+- `https://atlasia.aicorebots.com/` → `200`, `server: nginx/1.27.5`, `<title>AI World Atlas</title>`.
+- `https://atlasia.aicorebots.com/healthz` → `ok`.
+- `https://atlasia.aicorebots.com/api/health` → `{"status":"ok","api":"atlas-api","database":"up","version":"0.1.0"}`.
+- `https://atlasia.aicorebots.com/api/stats` → `{"totals":{"projects":5,"locations":11,"sources":7},...}`.
+- `https://atlasia.aicorebots.com/api/projects?pageSize=1` → real seeded project data.
+- TLS: Let's Encrypt certificate for `CN=atlasia.aicorebots.com` (`issuer=Let's Encrypt YR1`, valid 2026-10-03 → 2027-01-01), served by Traefik.
+- Dokploy `composeStatus` = `done`; deployment `vqN1qH5An5iT3EtX1ytXl` = `done`; all three containers `healthy`.
+
+**Known limitation**
+
+`VITE_MAPBOX_TOKEN` is empty in the deployment environment, so the globe renders the honest data-only fallback map. Setting a token and redeploying enables the Mapbox globe.
+
+**Operational note**
+
+Dokploy was driven through its REST API (`http://localhost:3000/api/<router>.<procedure>` with an `x-api-key` header) from the VPS over SSH. The API key used was created directly in Dokploy's Postgres (`apikey` table) because Dokploy hashes keys and none was recoverable; it is auditable and removable by row id.
+
+**Still out of scope for this addendum**
+
+Task 18 (Playwright e2e), Task 20 (README/OPERATIONS/ADRs), Task 21 (CI) and Task 22 (final proof) remain pending. Deployment here does not replace the CI verification point for the container build.

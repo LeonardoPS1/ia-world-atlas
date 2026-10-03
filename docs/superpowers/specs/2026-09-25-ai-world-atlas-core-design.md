@@ -508,7 +508,7 @@ Strip con total de proyectos, locations, sources, fecha de última verificación
 - Sin secretos en el bundle; `VITE_MAPBOX_TOKEN` es público por diseño y debe restringirse por URL en producción.
 - `DATABASE_URL` obligatoria fuera de desarrollo; credenciales de Docker mediante `.env`.
 - `docker-compose.yml` publica DB sólo en `127.0.0.1:5432`, agrega `pg_isready` healthcheck y elimina `container_name` fijo.
-- API y web tienen Dockerfiles multi-stage no-root; `docker-compose.prod.yml` queda preparado para Dokploy pero no despliega en esta entrega.
+- API y web tienen Dockerfiles multi-stage no-root; `docker-compose.prod.yml` queda preparado para Dokploy pero no despliega en esta entrega. **(Actualizado 2026-10-03: la pila se desplegó de verdad en el VPS con Dokploy; ver el addendum del plan.)**
 - Token Mapbox ausente o inválido nunca bloquea la exploración de datos.
 
 ---
@@ -637,7 +637,7 @@ Push a `origin/main` sólo después de:
 - No hay rotación automática ni rankings.
 - La API es read-only en V1.
 - La fuente primaria, la fecha y la evidencia acompañan cada registro.
-- La estructura está orientada a Docker y Dokploy, pero el despliegue queda fuera de esta entrega.
+- La estructura está orientada a Docker y Dokploy, pero el despliegue queda fuera de esta entrega. **(Actualizado 2026-10-03: desplegado y verificado en el VPS con Dokploy; ver el addendum del plan.)**
 
 ---
 
