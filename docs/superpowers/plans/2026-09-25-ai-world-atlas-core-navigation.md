@@ -9137,7 +9137,7 @@ One correction to apply while writing this file: `el()` does not support an `onC
 - [ ] **Step 5: Run the fallback test and confirm it passes**
 
 Run: `npx vitest run --project web apps/web/src/map`
-Expected: PASS, 5 files / 26 tests.
+Expected: PASS, 5 files / 28 tests.
 
 - [ ] **Step 6: Commit**
 
