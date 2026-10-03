@@ -125,7 +125,7 @@ slot; nothing runs on its own.
 | 11 | Application state, semantic colour mapping, selection rules | 3 | done (`e312097`) |
 | 12 | Derived view state and accent normalisation | 3 | done (`5e44a20`) |
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | done (`49446ce`) |
-| 14 | Data-only fallback map and diagnostics banner | 3 | pending |
+| 14 | Data-only fallback map and diagnostics banner | 3 | done (`bfe82d3`) |
 | 15 | Shell, header, breadcrumb, status badge, legend | 3 | pending |
 | 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | pending |
 | 17 | Data controller, bootstrap and entry point | 4 | pending |
@@ -438,6 +438,28 @@ fails on missing `/src/main.ts` (Task 17). No new failures.
 fails on missing `/src/main.ts` (Task 17). No new failures.
 
 **Mutation evidence:** reverting `MARKER_SHAPES` import breaks "different glyph per level" test; reverting `let container` breaks typecheck; reverting plan test-count lines produces mismatches.
+
+### 2026-10-03 — Task 14 closed as `bfe82d3`
+
+`feat(web): add data-only fallback map with an honest diagnostic banner`, 4 files
+(fallback + test + fixtures + plan), +520/−5 (net +515). No AI attribution.
+
+**Plan defects corrected (5):**
+1. `el()` no soporta `onClick` → `addEventListener('click')` after node creation.
+2. `clustersFixture` export en `fixtures.ts` (correcto), no en `fixture-data.ts`.
+3. Plan test count: "5 files / 26 tests" → "5 files / 28 tests" (fallback 9 + map prev 19).
+4. `projectToEquirectangular` acepta `Pick<Cluster, 'lat'|'lng'>` (test usa spread).
+5. `levelLabel` import desde `../state/colors.ts` (correcto).
+
+**Bugs adicionales encontrados y arreglados:**
+- `replaceChildren` borraba la capa de markers → añadido `markerLayer` separado y `overlay.replaceChildren(graticule, markerLayer, list)`.
+- Items de lista tenían `data-cluster-id` (test esperaba 11 markers, no items) → removido de items.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **251 passed | 19 skipped** (baseline 242 → +9). `npm run build`
+falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
+
+**Mutation evidence:** revertir `addEventListener` rompe test de selección; revertir `markerLayer` rompe test de graticule + markers; revertir plan test-count produce mismatch.
 
 ### Lessons — the subagent report is not the evidence
 
