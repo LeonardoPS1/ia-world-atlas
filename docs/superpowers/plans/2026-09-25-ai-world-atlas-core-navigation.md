@@ -8690,6 +8690,19 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
       return 'globe';
     },
     mount(target) {
+      // NOTE (2026-10-03) — mapbox-gl loading was missing from this task.
+      // The shipped adapter lives in apps/web/src/map/globe.ts and resolves the
+      // constructor as `options.mapbox ?? globalThis.mapboxgl`, but this plan
+      // never specified who loads mapbox-gl, so nothing ever set either one and
+      // the globe always fell back with "mapboxgl is not loaded". The load now
+      // lives in apps/web/src/map/mapbox.ts and is injected from
+      // apps/web/src/app/boot.ts:
+      //   import { MapboxMap } from '../map/mapbox.ts';
+      //   createGlobeAdapter({ host, onSelect, token, mapbox: MapboxMap });
+      // mapbox-gl exports a namespace object, so the constructor is
+      // `mapboxgl.Map`, never `mapboxgl` itself.
+      // Any future change to this task must keep a real constructor reaching the
+      // adapter; apps/web/src/map/mapbox.test.ts guards that the module loads.
       const MapCtor = (options.mapbox ?? (globalThis as { mapboxgl?: unknown }).mapboxgl) as
         | (new (options: Record<string, unknown>) => MapLike)
         | undefined;

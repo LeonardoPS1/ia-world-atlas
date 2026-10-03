@@ -19,6 +19,12 @@ export interface GlobeAdapterOptions {
   host: HTMLElement;
   token: string;
   onSelect: (projectId: string) => void;
+  /**
+   * Optional Mapbox GL constructor injection point. Tests pass a stub; the
+   * application passes the real module imported from `mapbox-gl` in boot.ts.
+   * Falls back to a `globalThis.mapboxgl` global when neither is provided.
+   */
+  mapbox?: unknown;
 }
 
 interface MapLike {
@@ -92,7 +98,7 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
     if (hit) onSelect(hit.locationId);
   }
 
-  const MapCtor = (globalThis as { mapboxgl?: unknown }).mapboxgl as
+  const MapCtor = (options.mapbox ?? (globalThis as { mapboxgl?: unknown }).mapboxgl) as
     | (new (options: Record<string, unknown>) => MapLike)
     | undefined;
 

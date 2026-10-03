@@ -1,6 +1,7 @@
 import { diagnoseMapEnvironment } from '../map/diagnostics.ts';
 import { createFallbackAdapter } from '../map/fallback.ts';
 import { createGlobeAdapter } from '../map/globe.ts';
+import { MapboxMap } from '../map/mapbox.ts';
 import { buildSelectors } from '../state/selectors.ts';
 import { createDrawer, renderDrawer } from '../ui/drawer.ts';
 import { createHeader } from '../ui/header.ts';
@@ -51,7 +52,12 @@ function defaultMapFactory(): MapFactory {
         height: host.clientHeight ?? 540,
       });
     }
-    const globe = await createGlobeAdapter({ host, onSelect, token: diagnostics.token ?? '' });
+    const globe = await createGlobeAdapter({
+      host,
+      onSelect,
+      token: diagnostics.token ?? '',
+      mapbox: MapboxMap,
+    });
     globe.setMode('globe');
     return globe;
   };
