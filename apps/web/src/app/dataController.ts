@@ -28,7 +28,7 @@ export function createDataController(options: DataControllerOptions) {
     inFlight?.abort();
     const controller = new AbortController();
     inFlight = controller;
-    const { filters, selectedProjectId, level, focusLocationId } = store.getState();
+    const { filters, selectedProjectId, focusLocationId } = store.getState();
 
     try {
       const health = await client.health(controller.signal);
@@ -51,8 +51,13 @@ export function createDataController(options: DataControllerOptions) {
     if (focusLocationId) listQuery.locationId = focusLocationId;
 
     try {
+      // Every location is loaded, unfiltered by the active scale: the map needs
+      // the whole hierarchy to place one marker per location, and the scale
+      // control only enables the levels that actually have data. Filtering the
+      // request by `level` left the first load with the empty world node alone,
+      // which hid every project from the map and disabled every other scale.
       const [locations, projects] = await Promise.all([
-        client.locations({ ...(level ? { level } : {}) }, controller.signal),
+        client.locations({}, controller.signal),
         client.projects({ ...listQuery }, controller.signal),
       ]);
       store.dispatch({ type: 'data/locations', payload: locations });

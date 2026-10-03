@@ -10796,7 +10796,7 @@ export function createDataController(options: DataControllerOptions) {
     inFlight?.abort();
     const controller = new AbortController();
     inFlight = controller;
-    const { filters, selectedId, level, selectedLocationId } = store.getState();
+    const { filters, selectedId, selectedLocationId } = store.getState();
 
     try {
       const health = await client.health({ signal: controller.signal });
@@ -10820,7 +10820,13 @@ export function createDataController(options: DataControllerOptions) {
 
     try {
       const [locations, projects] = await Promise.all([
-        client.locations({ ...(level ? { level } : {}), signal: controller.signal }),
+        // Loads the whole location hierarchy, unfiltered by the active scale:
+        // the map places one marker per location and the scale control only
+        // enables the levels that actually have data. Fixed 2026-10-03 — the
+        // earlier `level` filter left the first load with the empty world node
+        // alone, which hid every project from the map and disabled every other
+        // scale button.
+        client.locations({ signal: controller.signal }),
         client.projects({ ...listQuery, signal: controller.signal }),
       ]);
       store.dispatch({ type: 'data/locations', payload: locations });

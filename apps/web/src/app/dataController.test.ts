@@ -3,7 +3,19 @@ import { createDataController } from './dataController.ts';
 import { createApiClient } from '../data/client.ts';
 import { createStore, createInitialState } from '../state/store.ts';
 import { buildQueryString } from '../data/query.ts';
-import { listBodies, atlasDataFixture } from '../testing/fixtures.ts';
+import { listBodies, atlasDataFixture, locationsFixture } from '../testing/fixtures.ts';
+
+/**
+ * The real API filters locations by level. Modelling that here is what makes
+ * the first-refresh test able to fail if the controller ever filters the
+ * request again: `level=WORLD` would return the single empty world node, which
+ * is exactly what hid every project from the map.
+ */
+function locationsFor(url: string) {
+  const level = /[?&]level=([^&]+)/.exec(url)?.[1];
+  const data = level ? locationsFixture.filter((location) => location.level === level) : locationsFixture;
+  return { ...listBodies.locations, data, total: data.length };
+}
 
 function harness() {
   const urls: string[] = [];
@@ -24,7 +36,7 @@ function harness() {
       : url.includes('/projects')
         ? { data: { id: 'chile-national-ai-policy', name: 'Política Nacional de IA 2024', type: 'POLICY', status: 'DEPLOYING', evidenceLevel: 'OFFICIAL', sector: 'Gobierno', publishedAt: '2024-03-01', endedAt: null, summary: null, organizations: [], locationIds: ['pucv-campus'], tags: [] } }
         : url.includes('/locations')
-          ? listBodies.locations
+          ? locationsFor(url)
           : url.includes('/events')
             ? { data: atlasDataFixture.events, count: atlasDataFixture.events.length }
             : url.includes('/relations')
@@ -45,6 +57,10 @@ describe('data controller', () => {
     const { controller, store, urls } = harness();
     await controller.refresh();
     expect(urls.some((u) => u.includes('/locations'))).toBe(true);
+    // The whole location hierarchy must be loaded: filtering by the active
+    // scale left the first load with the empty world node alone, which hid
+    // every project from the map and disabled every other scale button.
+    expect(urls.some((u) => u.includes('/locations') && !u.includes('level='))).toBe(true);
     expect(urls.some((u) => u.includes('/projects?'))).toBe(true);
     expect(urls.some((u) => u.includes('/events'))).toBe(true);
     // /relations requires a projectId; with no selection the controller must
