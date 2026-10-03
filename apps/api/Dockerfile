@@ -25,6 +25,7 @@ COPY --from=build --chown=atlas:atlas /app/packages/contracts/dist ./packages/co
 COPY --from=build --chown=atlas:atlas /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build --chown=atlas:atlas /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=atlas:atlas /app/apps/api/migrations ./apps/api/migrations
+COPY --from=build --chown=atlas:atlas /app/apps/api/seeds ./apps/api/seeds
 USER atlas
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=4s --start-period=20s --retries=3 \

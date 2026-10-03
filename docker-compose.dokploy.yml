@@ -41,7 +41,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "node apps/api/dist/db/migrate-cli.js && node apps/api/dist/server.js"
+      sh -c "node apps/api/dist/db/migrate-cli.js && node apps/api/dist/db/seed-cli.js && node apps/api/dist/server.js"
     networks:
       - internal
     restart: unless-stopped
