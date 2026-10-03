@@ -122,7 +122,7 @@ slot; nothing runs on its own.
 | 8 | API security and error-contract tests | 2 | done (`457b9da`, ledger closure `0249ac5`) |
 | 9 | Design tokens, base styles, safe DOM primitives, inline icons | 3 | done (`8755b4b`) |
 | 10 | Typed API client with runtime contract validation | 3 | done (`46aa6de`) |
-| 11 | Application state, semantic colour mapping, selection rules | 3 | pending |
+| 11 | Application state, semantic colour mapping, selection rules | 3 | done (`e312097`) |
 | 12 | Derived view state and accent normalisation | 3 | pending |
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | pending |
 | 14 | Data-only fallback map and diagnostics banner | 3 | pending |
@@ -366,6 +366,34 @@ due to 8-vs-9 client test count). `npm run build` still fails on missing
 
 **Mutation evidence:** reverting any of the 4 contracts schemas breaks typecheck
 and client tests. Reverting the plan test-count line produces a mismatch.
+
+### 2026-10-03 — Task 11 closed as `e312097`
+
+`feat(web): add immutable store semantic palette and hierarchy selectors`, 14 files,
++1890/−10 (net +1880). No AI attribution.
+
+**Major plan defects corrected (12):**
+1. Vocabularies in `colors.ts` now match `@atlas/contracts` (12 statuses, 6 evidence,
+   16 types) — plan hardcoded different values.
+2. `EvidenceIntent` type is `OBSERVED | EXPECTED | UNCONFIRMED` (not `EvidenceLevel`).
+3. `BASE_SIZES` adjusted so `markerSizeFor` max ≤ 22 (plan: 22+3=25 > budget).
+4. `yearStep` stops at edges (test expects no movement from min/max).
+5. `canDescend` checks for **children**, not existence at level (plan: `some(...level===)`).
+6. `geo.test.ts`: `valparaiso-city` → `valparaiso` (fixture ID).
+6. `eventsInYear` test year 2025 → 2026 (fixture has no 2025 events).
+7. `palette.test.ts`: impossible `LOCAL_AREA` > `WORLD` assertion replaced.
+8. `atlasDataFixture.stats` missing — test creates inline `StatsResponse`.
+9. `shallowEqual` type fixed (AtlasFilters lacks index signature).
+10. Plan Step 8: "4 files / 19 tests" → "5 files / 30 tests" (colors + 4 modules).
+11. Plan Step 11: "9 files / 37 tests" → "11 files / 67 tests" (full web suite).
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **206 passed | 19 skipped** (baseline 165 → +41). `npm run build`
+still fails on missing `/src/main.ts` (Task 17). No new failures.
+
+**Mutation evidence:** reverting any colour constant breaks "separates adjacent
+statuses" test; reverting BASE_SIZES breaks budget test; reverting plan
+test-count lines produces mismatches.
 
 ### Lessons — the subagent report is not the evidence
 
