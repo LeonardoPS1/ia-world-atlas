@@ -123,7 +123,7 @@ slot; nothing runs on its own.
 | 9 | Design tokens, base styles, safe DOM primitives, inline icons | 3 | done (`8755b4b`) |
 | 10 | Typed API client with runtime contract validation | 3 | done (`46aa6de`) |
 | 11 | Application state, semantic colour mapping, selection rules | 3 | done (`e312097`) |
-| 12 | Derived view state and accent normalisation | 3 | pending |
+| 12 | Derived view state and accent normalisation | 3 | done (`5e44a20`) |
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | pending |
 | 14 | Data-only fallback map and diagnostics banner | 3 | pending |
 | 15 | Shell, header, breadcrumb, status badge, legend | 3 | pending |
@@ -394,6 +394,30 @@ still fails on missing `/src/main.ts` (Task 17). No new failures.
 **Mutation evidence:** reverting any colour constant breaks "separates adjacent
 statuses" test; reverting BASE_SIZES breaks budget test; reverting plan
 test-count lines produces mismatches.
+
+### 2026-10-03 — Task 12 closed as `5e44a20`
+
+`feat(web): derive clusters legend summaries and a single accent`, 4 files
+(normalize + selectors, each with test), +375/−5 (net +370). No AI attribution.
+
+**Plan defects corrected (7):**
+1. `normalize.ts` `pickAccent` returns status colour directly (plan's `accentRank`/`ACCENT_BY_EVIDENCE` unused).
+2. `selectors.ts` default accent: `STATUS_COLORS.ACTIVE` → `STATUS_COLORS.ANNOUNCED` (vocabulary has no `ACTIVE`).
+3. `selectors.test.ts`: `valparaiso-city` → `valparaiso` (fixture ID).
+4. `selectors.test.ts`: `atlasDataFixture.stats` missing → inline `StatsResponse` with `totals.projects: 5`.
+5. `selectors.test.ts`: `statusSummary.every(count > 0)` impossible (5 projects, 12 statuses) → `total === 5`.
+6. Plan Step 4: "6 tests" → "9 tests" (normalize).
+7. Plan Step 8: "2 files / 12 tests" → "2 files / 17 tests" (9+8).
+8. Plan Step 9: "11 files / 49 tests" → "13 files / 84 tests" (full web suite).
+9. Removed false plan invariant comment "status vocabulary has no ACTIVE member".
+
+**Type adaptations:** `ProjectSummary` lacks `endedAt` (all projects ongoing) and uses `evidence` (not `evidenceLevel`); `Source` uses `publicationDate`. Implementation adapted — year filtering uses only `publishedAt`.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **223 passed | 19 skipped** (baseline 206 → +17). `npm run build`
+fails on missing `/src/main.ts` (Task 17). No new failures.
+
+**Mutation evidence:** reverting `pickAccent` or default accent breaks "fixed palette only" and `accent` tests; reverting plan test-count lines produces mismatches.
 
 ### Lessons — the subagent report is not the evidence
 
