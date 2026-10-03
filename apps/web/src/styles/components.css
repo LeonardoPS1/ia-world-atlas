@@ -418,3 +418,56 @@
   text-align: center;
   color: var(--color-text-dim);
 }
+
+.atlas-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.atlas-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  background: none;
+  border: none;
+}
+
+.atlas-marker svg {
+  display: block;
+  overflow: visible;
+}
+
+.atlas-marker__count {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--color-obsidian);
+  color: var(--color-warm-white);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.atlas-marker--selected {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.atlas-marker--selected::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.5;
+}
