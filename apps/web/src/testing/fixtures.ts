@@ -3,7 +3,7 @@ import type { Cluster } from '../state/selectors.ts';
 import { EVIDENCE_COLORS, STATUS_COLORS } from '../state/colors.ts';
 import { markerShapeFor, markerSizeFor } from '../state/palette.ts';
 
-export { atlasDataFixture, projectsFixture, locationsFixture, eventsFixture } from './fixture-data.ts';
+export { atlasDataFixture, projectsFixture, locationsFixture, eventsFixture, statsFixture } from './fixture-data.ts';
 export * from './fixture-data.ts';
 
 const sourcesFor = (projectId: string) => {

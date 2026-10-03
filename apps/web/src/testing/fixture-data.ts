@@ -1,4 +1,4 @@
-import type { Event, Location, ProjectDetail, Relation, Source } from '@atlas/contracts';
+import type { Event, Location, ProjectDetail, Relation, Source, StatsResponse } from '@atlas/contracts';
 
 const location = (
   id: string,
@@ -136,10 +136,18 @@ export const projectsFixture: ProjectDetail[] = [
 
 export const relationsFixture: Relation[] = [];
 
+export const statsFixture: StatsResponse = {
+  totals: { projects: 5, locations: 11, sources: 5 },
+  byEvidence: { REPORTED: 4, ANNOUNCED: 1 },
+  byType: { RESEARCH: 1, POLICY: 1, GOVERNMENT: 1, INFRASTRUCTURE: 2 },
+  byStatus: { ACTIVE: 3, DEPLOYING: 1, RESEARCH: 1 },
+};
+
 export const atlasDataFixture = {
   locations: locationsFixture,
   projects: projectsFixture,
   sources: sourcesFixture,
   events: eventsFixture,
   relations: relationsFixture,
+  stats: statsFixture,
 };

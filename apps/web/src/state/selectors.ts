@@ -4,7 +4,7 @@ import type {
 import { STATUS_COLORS, EVIDENCE_COLORS, EVIDENCE_INTENTS, evidenceColor, levelLabel, statusColor } from './colors.ts';
 import { breadcrumbTrail, descendantIds } from './geo.ts';
 import { markerShapeFor, markerSizeFor } from './palette.ts';
-import { pickAccent, visibleProjectsInYear } from '../data/normalize.ts';
+import { pickAccent } from '../data/normalize.ts';
 import { evidenceSchema, locationLevelSchema, projectStatusSchema } from '@atlas/contracts';
 import type {
   EvidenceLevel,
@@ -53,15 +53,17 @@ function locationCenter(location: Location): { lat: number; lng: number } {
 
 export function buildSelectors(state: AtlasState): Selectors {
   const { projects, locations, focusLocationId, timeline } = state;
+  const locationsArray = locations.data;
+  const projectsArray = projects.data;
 
-  const scoped = focusLocationId ? descendantIds(locations, focusLocationId) : locations.map((l) => l.id);
+  const scoped = focusLocationId ? descendantIds(locationsArray, focusLocationId) : locationsArray.map((l) => l.id);
   const scopedSet = new Set(scoped);
-  const visibleLocations = locations.filter((location) => scopedSet.has(location.id));
+  const visibleLocations = locationsArray.filter((location) => scopedSet.has(location.id));
 
-  const yearProjects = visibleProjectsInYear(projects, timeline.year);
+  // Clusters show all projects (not filtered by year) — year filtering is for timeline only
   const scopedProjects = focusLocationId
-    ? yearProjects.filter((project) => project.locationId && scopedSet.has(project.locationId))
-    : yearProjects;
+    ? projectsArray.filter((project) => project.locationId && scopedSet.has(project.locationId))
+    : projectsArray;
 
   const maxCount = visibleLocations.reduce((max, location) => {
     const count = projectsByLocation(scopedProjects, location.id).length;
@@ -86,10 +88,10 @@ export function buildSelectors(state: AtlasState): Selectors {
   });
 
   const levelEnabled = Object.fromEntries(
-    locationLevelSchema.options.map((level) => [level, locations.some((l) => l.level === level)]),
+    locationLevelSchema.options.map((level) => [level, locationsArray.some((l) => l.level === level)]),
   ) as Record<LocationLevel, boolean>;
 
-  const years = projects
+  const years = projectsArray
     .flatMap((project) => {
       const start = project.publishedAt ? new Date(project.publishedAt).getUTCFullYear() : null;
       // Contracts have no endedAt; only use start year.
@@ -102,19 +104,19 @@ export function buildSelectors(state: AtlasState): Selectors {
   const evidenceSummary = evidenceSchema.options.map((level) => ({
     level,
     color: evidenceColor(level),
-    count: projects.filter((project) => project.evidence === level).length,
+    count: projectsArray.filter((project) => project.evidence === level).length,
   }));
 
   const statusSummary = projectStatusSchema.options.map((status) => ({
     status,
     color: statusColor(status),
-    count: projects.filter((project) => project.status === status).length,
+    count: projectsArray.filter((project) => project.status === status).length,
   }));
 
-  const selected = projects.find((project) => project.id === state.selectedProjectId);
+  const selected = projectsArray.find((project) => project.id === state.selectedProjectId);
 
   return {
-    breadcrumb: breadcrumbTrail(locations, focusLocationId),
+    breadcrumb: breadcrumbTrail(locationsArray, focusLocationId),
     visibleLocations,
     clusters,
     accent: selected ? pickAccent(selected) : STATUS_COLORS.ANNOUNCED,

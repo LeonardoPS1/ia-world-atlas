@@ -4,11 +4,13 @@ import type {
   ProjectListResponse,
   StatsResponse,
 } from '@atlas/contracts';
-import type { HealthResponse, Location, LocationLevel, ProjectSummary } from '../data/types.ts';
+import type { HealthResponse, LocationLevel, ProjectSummary, ProjectDetail } from '../data/types.ts';
 import type { AtlasFilters } from './filters.ts';
 import { EMPTY_FILTERS, toggleInList } from './filters.ts';
 import type { TimelineState } from './timeline.ts';
 import { clampYear } from './timeline.ts';
+
+export { toggleInList } from './filters.ts';
 
 function shallowEqual<T extends object>(a: T, b: T): boolean {
   const keysA = Object.keys(a as Record<string, unknown>);
@@ -28,17 +30,18 @@ export interface AtlasState {
   timeline: TimelineState;
   railOpen: boolean;
   drawerOpen: boolean;
-  projects: ProjectSummary[];
-  locations: Location[];
+  projects: ProjectListResponse;
+  locations: LocationListResponse;
   stats: StatsResponse | null;
   health: HealthResponse | null;
-  apiStatus: 'idle' | 'loading' | 'ok' | 'error';
-  apiError: string | null;
+  api: { status: 'idle' | 'loading' | 'ok' | 'error'; detail: string | null };
   lastRequestId: string | null;
   globalTotal: number;
   matchingTotal: number;
   mapMode: 'globe' | 'fallback';
   fallbackReason: string | null;
+  detail: ProjectDetail | null;
+  events: EventListResponse;
 }
 
 export type Action =
@@ -46,7 +49,8 @@ export type Action =
   | { type: 'filters/reset' }
   | { type: 'filters/toggleValue'; key: 'type' | 'status' | 'evidence'; value: string }
   | { type: 'focus/set'; locationId: string | null }
-  | { type: 'select/project'; projectId: string | null }
+  | { type: 'selection/set'; id: string | null }
+  | { type: 'selection/clear' }
   | { type: 'level/set'; level: LocationLevel }
   | { type: 'timeline/setYear'; year: number }
   | { type: 'timeline/play' }
@@ -54,12 +58,15 @@ export type Action =
   | { type: 'timeline/step'; delta: number }
   | { type: 'panel/rail'; open: boolean }
   | { type: 'panel/drawer'; open: boolean }
-  | { type: 'data/projects'; payload: ProjectListResponse }
+  | { type: 'data/projects'; payload: { data: ProjectSummary[]; page: number; pageSize: number; total: number; totalPages: number } }
   | { type: 'data/locations'; payload: LocationListResponse }
   | { type: 'data/events'; payload: EventListResponse }
   | { type: 'data/stats'; payload: StatsResponse }
-  | { type: 'data/health'; payload: HealthResponse }
-  | { type: 'api/status'; payload: Pick<AtlasState, 'apiStatus' | 'apiError' | 'lastRequestId'> }
+  | { type: 'data/detail'; payload: ProjectDetail | null }
+  | { type: 'data/error'; detail: string }
+  | { type: 'api/healthy' }
+  | { type: 'api/unhealthy'; detail: string }
+  | { type: 'ui/lastRequestId'; requestId: string | null }
   | { type: 'map/mode'; payload: { mode: 'globe' | 'fallback'; reason?: string | null } };
 
 export function createInitialState(patch: Partial<AtlasState> = {}): AtlasState {
@@ -71,22 +78,23 @@ export function createInitialState(patch: Partial<AtlasState> = {}): AtlasState 
     timeline: { year: 2026, playing: false, minYear: 2020, maxYear: 2026 },
     railOpen: true,
     drawerOpen: false,
-    projects: [],
-    locations: [],
+    projects: { data: [], page: 1, pageSize: 50, total: 0, totalPages: 0 },
+    locations: { data: [], page: 1, pageSize: 50, total: 0, totalPages: 0 },
     stats: null,
     health: null,
-    apiStatus: 'idle',
-    apiError: null,
+    api: { status: 'idle', detail: null },
     lastRequestId: null,
     globalTotal: 0,
     matchingTotal: 0,
     mapMode: 'globe',
     fallbackReason: null,
+    detail: null,
+    events: { data: [], count: 0 },
     ...patch,
   };
 }
 
-function toggleFilterValue(state: AtlasState, key: 'type' | 'status' | 'evidence', value: string): AtlasState {
+export function toggleFilterValue(state: AtlasState, key: 'type' | 'status' | 'evidence', value: string): AtlasState {
   const current = state.filters[key] as readonly string[];
   return { ...state, filters: { ...state.filters, [key]: toggleInList(current, value) } };
 }
@@ -109,10 +117,12 @@ export function reduce(state: AtlasState, action: Action): AtlasState {
       return toggleFilterValue(state, action.key, action.value);
     case 'focus/set':
       return { ...state, focusLocationId: action.locationId };
-    case 'select/project':
-      return action.projectId === null
+    case 'selection/set':
+      return action.id === null
         ? { ...state, selectedProjectId: null, drawerOpen: false }
-        : { ...state, selectedProjectId: action.projectId, drawerOpen: true };
+        : { ...state, selectedProjectId: action.id, drawerOpen: true };
+    case 'selection/clear':
+      return { ...state, selectedProjectId: null, drawerOpen: false };
     case 'level/set':
       return { ...state, level: action.level };
     case 'timeline/setYear':
@@ -135,17 +145,23 @@ export function reduce(state: AtlasState, action: Action): AtlasState {
     case 'panel/drawer':
       return { ...state, drawerOpen: action.open };
     case 'data/projects':
-      return { ...state, projects: action.payload.data, matchingTotal: action.payload.total };
+      return { ...state, projects: action.payload, matchingTotal: action.payload.total };
     case 'data/locations':
-      return { ...state, locations: action.payload.data };
+      return { ...state, locations: action.payload };
     case 'data/events':
-      return state;
+      return { ...state, events: action.payload };
     case 'data/stats':
       return { ...state, stats: action.payload, globalTotal: action.payload.totals.projects };
-    case 'data/health':
-      return { ...state, health: action.payload };
-    case 'api/status':
-      return { ...state, ...action.payload };
+    case 'data/detail':
+      return { ...state, detail: action.payload };
+    case 'data/error':
+      return { ...state, api: { status: 'error', detail: action.detail } };
+    case 'api/healthy':
+      return { ...state, api: { status: 'ok', detail: null } };
+    case 'api/unhealthy':
+      return { ...state, api: { status: 'error', detail: action.detail } };
+    case 'ui/lastRequestId':
+      return { ...state, lastRequestId: action.requestId };
     case 'map/mode':
       return {
         ...state,

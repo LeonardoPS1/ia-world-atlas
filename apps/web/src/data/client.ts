@@ -46,8 +46,11 @@ export class ContractError extends Error {
   }
 }
 
+// HealthResponse extended with requestId from x-request-id header
+export type HealthResponseWithRequestId = HealthResponse & { requestId: string | null };
+
 export interface ApiClient {
-  health(signal?: AbortSignal): Promise<HealthResponse>;
+  health(signal?: AbortSignal): Promise<HealthResponseWithRequestId>;
   locations(query: Record<string, unknown>, signal?: AbortSignal): Promise<LocationListResponse>;
   projects(query: Record<string, unknown>, signal?: AbortSignal): Promise<ProjectListResponse>;
   project(id: string, signal?: AbortSignal): Promise<ProjectDetail>;
@@ -141,8 +144,66 @@ export function createApiClient(baseUrl: string, options: ApiClientOptions = {})
     }
   }
 
+  async function requestWithRequestId<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    query: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T & { requestId: string | null }> {
+    const queryString = buildQueryString(query);
+    const url = queryString ? `${join(baseUrl, path)}?${queryString}` : join(baseUrl, path);
+
+    let attempt = 0;
+    for (;;) {
+      let response: Response;
+      try {
+        response = await fetchImpl(url, {
+          headers: { accept: 'application/json' },
+          signal,
+        });
+      } catch (error) {
+        const isAbort = error instanceof DOMException && error.name === 'AbortError';
+        if (isAbort || attempt >= retryCount) throw error;
+        attempt += 1;
+        await sleep(retryDelayMs);
+        continue;
+      }
+
+      if (response.ok) {
+        const json: unknown = await response.json();
+        const parsed = schema.safeParse(json);
+        if (!parsed.success) {
+          throw new ContractError(
+            path,
+            parsed.error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`),
+          );
+        }
+        const requestId = response.headers.get('x-request-id');
+        return { ...parsed.data, requestId };
+      }
+
+      if (RETRYABLE.has(response.status) && attempt < retryCount) {
+        attempt += 1;
+        await sleep(retryDelayMs);
+        continue;
+      }
+
+      const errorBody: unknown = await response.json().catch(() => null);
+      const parsedError = apiErrorSchema.safeParse(errorBody);
+      if (parsedError.success) {
+        throw new ApiRequestError(
+          response.status,
+          parsedError.data.error.code,
+          parsedError.data.error.message,
+          parsedError.data.error.requestId,
+        );
+      }
+      throw new ApiRequestError(response.status, 'HTTP_ERROR', `Request to ${path} failed`, null);
+    }
+  }
+
   return {
-    health: (signal) => request('/health', healthResponseSchema, {}, signal),
+    health: (signal) => requestWithRequestId('/health', healthResponseSchema, {}, signal),
     locations: (query, signal) => request('/locations', locationListResponseSchema, query, signal),
     projects: (query, signal) => request('/projects', projectListResponseSchema, query, signal),
     project: async (id, signal) => {

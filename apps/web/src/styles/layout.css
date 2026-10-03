@@ -127,3 +127,16 @@
     border-radius: 12px 12px 0 0;
   }
 }
+
+.atlas-map[data-map-mode='globe'] .project-list {
+  display: none;
+}
+
+.atlas-map[data-map-mode='fallback'] .project-list {
+  display: flex;
+}
+
+.fallback__points {
+  position: absolute;
+  inset: 0;
+}

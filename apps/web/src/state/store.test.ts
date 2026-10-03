@@ -20,7 +20,7 @@ describe('createStore', () => {
     expect(state.filters.q).toBe('');
     expect(state.level).toBe('WORLD');
     expect(state.mapMode).toBe('globe');
-    expect(state.apiStatus).toBe('idle');
+    expect(state.api.status).toBe('idle');
     expect(state.globalTotal).toBe(0);
   });
 
@@ -59,14 +59,14 @@ describe('createStore', () => {
     const state = store.getState();
     expect(state.globalTotal).toBe(5);
     expect(state.matchingTotal).toBe(5);
-    expect(state.projects).toHaveLength(5);
+    expect(state.projects.data).toHaveLength(5);
   });
 
   it('resets every filter and closes the drawer without touching the level', () => {
     const store = createStore(createInitialState());
     store.dispatch({ type: 'filters/toggleValue', key: 'status', value: 'DEPLOYING' });
     store.dispatch({ type: 'level/set', level: 'COUNTRY' });
-    store.dispatch({ type: 'select/project', projectId: 'chile-national-ai-policy' });
+    store.dispatch({ type: 'selection/set', id: 'chile-national-ai-policy' });
     store.dispatch({ type: 'filters/reset' });
     const state = store.getState();
     expect(state.filters.status).toEqual([]);
@@ -76,9 +76,9 @@ describe('createStore', () => {
 
   it('opens the drawer when a project is selected and closes it when cleared', () => {
     const store = createStore(createInitialState());
-    store.dispatch({ type: 'select/project', projectId: 'eu-ai-factories' });
+    store.dispatch({ type: 'selection/set', id: 'eu-ai-factories' });
     expect(store.getState().drawerOpen).toBe(true);
-    store.dispatch({ type: 'panel/drawer', open: false });
+    store.dispatch({ type: 'selection/clear' });
     expect(store.getState().drawerOpen).toBe(false);
   });
 
@@ -101,10 +101,11 @@ describe('createStore', () => {
   it('records the last requestId on an api error', () => {
     const store = createStore(createInitialState());
     store.dispatch({
-      type: 'api/status',
-      payload: { apiStatus: 'error', apiError: 'Invalid request', lastRequestId: 'req-1' },
+      type: 'api/unhealthy',
+      detail: 'Invalid request',
     });
-    expect(store.getState().apiStatus).toBe('error');
+    store.dispatch({ type: 'ui/lastRequestId', requestId: 'req-1' });
+    expect(store.getState().api.status).toBe('error');
     expect(store.getState().lastRequestId).toBe('req-1');
   });
 
@@ -112,6 +113,6 @@ describe('createStore', () => {
     const store = createStore(createInitialState());
     const bogus: Action = { type: 'nope' } as never;
     store.dispatch(bogus);
-    expect(store.getState().apiStatus).toBe('idle');
+    expect(store.getState().api.status).toBe('idle');
   });
 });

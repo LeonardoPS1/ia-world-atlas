@@ -1,6 +1,5 @@
 import { createMarkerElement } from './markers.ts';
 import { clusterAt } from './cluster.ts';
-import type { MapDiagnostics } from './diagnostics.ts';
 import type { Cluster } from '../state/selectors.ts';
 
 export const INITIAL_CENTER: [number, number] = [-71.543, -33.0472];
@@ -9,21 +8,17 @@ export const MIN_ZOOM = 1.4;
 export const MAX_ZOOM = 11;
 
 export interface MapAdapter {
-  mount(container: HTMLElement): void;
-  destroy(): void;
   setClusters(clusters: Cluster[]): void;
-  focus(cluster: Cluster): void;
-  resize(): void;
-  readonly mode: 'globe' | 'fallback';
+  setSelected(id: string | null): void;
+  focus(id: string): void;
+  setMode(mode: 'globe' | 'fallback'): void;
+  destroy(): void;
 }
 
 export interface GlobeAdapterOptions {
+  host: HTMLElement;
   token: string;
-  center: [number, number];
-  zoom: number;
-  onSelect: (cluster: Cluster) => void;
-  onDiagnostics: (diagnostics: MapDiagnostics) => void;
-  mapbox?: unknown;
+  onSelect: (projectId: string) => void;
 }
 
 interface MapLike {
@@ -38,14 +33,15 @@ interface MapLike {
   getCanvas(): { style: Record<string, string> };
 }
 
-export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
+export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<MapAdapter> {
+  const { host, token, onSelect } = options;
   let map: MapLike | null = null;
   let markerLayer: HTMLElement | null = null;
   let clusters: Cluster[] = [];
   let selectedId: string | null = null;
   let reducedMotion = false;
   const markers = new Map<string, HTMLButtonElement>();
-  let container: HTMLElement | null = null;
+  let _currentMode: 'globe' | 'fallback' = 'globe';
 
   const reducedMotionQuery =
     typeof globalThis.matchMedia === 'function'
@@ -66,7 +62,7 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
           reducedMotion,
         });
       if (!existing) {
-        node.addEventListener('click', () => options.onSelect(cluster));
+        node.addEventListener('click', () => onSelect(cluster.locationId));
         markers.set(cluster.locationId, node);
       }
       node.setAttribute('aria-pressed', String(selectedId === cluster.locationId));
@@ -93,93 +89,74 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
         return projected ? [projected.x, projected.y] : [Number.NaN, Number.NaN];
       },
     );
-    if (hit) options.onSelect(hit);
+    if (hit) onSelect(hit.locationId);
   }
 
-  return {
-    get mode(): 'globe' | 'fallback' {
-      return 'globe';
-    },
-    mount(target) {
-      const MapCtor = (options.mapbox ?? (globalThis as { mapboxgl?: unknown }).mapboxgl) as
-        | (new (options: Record<string, unknown>) => MapLike)
-        | undefined;
-      if (!MapCtor) {
-        options.onDiagnostics({
-          tokenPresent: true,
-          webglAvailable: true,
-          constructorError: 'mapboxgl is not loaded',
-          styleLoadError: null,
-          mode: 'fallback',
-          reason: 'Mapbox GL failed to load',
-        });
-        return;
-      }
-      container = target;
-      markerLayer = document.createElement('div');
-      markerLayer.className = 'atlas-markers';
-      markerLayer.setAttribute('data-testid', 'marker-layer');
-      try {
-        map = new MapCtor({
-          container: target,
-          accessToken: options.token,
-          style: 'mapbox://styles/mapbox/dark-v11',
-          projection: 'globe',
-          center: options.center,
-          zoom: options.zoom,
-          minZoom: MIN_ZOOM,
-          maxZoom: MAX_ZOOM,
-          attributionControl: true,
-          dragRotate: true,
-          pitchWithRotate: false,
-        });
-      } catch (error) {
-        options.onDiagnostics({
-          tokenPresent: true,
-          webglAvailable: true,
-          constructorError: error instanceof Error ? error.message : String(error),
-          styleLoadError: null,
-          mode: 'fallback',
-          reason: 'Mapbox GL constructor threw',
-        });
-        return;
-      }
-      map.on('load' as never, (() => {
-        target.append(markerLayer as HTMLElement);
-        renderMarkers();
-        options.onDiagnostics({
-          tokenPresent: true,
-          webglAvailable: true,
-          constructorError: null,
-          styleLoadError: null,
-          mode: 'globe',
-          reason: null,
-        });
-      }) as never);
-      map.on('click' as never, handleClick as never);
-      map.on('error' as never, ((payload: { error?: Error }) => {
-        options.onDiagnostics({
-          tokenPresent: true,
-          webglAvailable: true,
-          constructorError: null,
-          styleLoadError: payload.error?.message ?? 'style error',
-          mode: 'globe',
-          reason: null,
-        });
-      }) as never);
-    },
+  const MapCtor = (globalThis as { mapboxgl?: unknown }).mapboxgl as
+    | (new (options: Record<string, unknown>) => MapLike)
+    | undefined;
+
+  if (!MapCtor) {
+    throw new Error('mapboxgl is not loaded');
+  }
+
+  markerLayer = document.createElement('div');
+  markerLayer.className = 'atlas-markers';
+  markerLayer.setAttribute('data-testid', 'marker-layer');
+
+  return new Promise<MapAdapter>((resolve, reject) => {
+    try {
+      map = new MapCtor({
+        container: host,
+        accessToken: token,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        projection: 'globe',
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+        attributionControl: true,
+        dragRotate: true,
+        pitchWithRotate: false,
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    map.on('load' as never, (() => {
+      host.append(markerLayer as HTMLElement);
+      renderMarkers();
+      resolve(adapter);
+    }) as never);
+
+    map.on('click' as never, handleClick as never);
+
+    map.on('error' as never, ((payload: { error?: Error }) => {
+      reject(payload.error ?? new Error('style error'));
+    }) as never);
+  });
+
+  const adapter: MapAdapter = {
     setClusters(next) {
       clusters = next;
       selectedId = next.length === 1 ? next[0]?.locationId ?? null : null;
       renderMarkers();
     },
-    focus(cluster) {
-      selectedId = cluster.locationId;
-      map?.easeTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(cluster.level === 'LOCAL_AREA' ? 11 : 6, 4), duration: reducedMotion ? 0 : 420 });
+    setSelected(id) {
+      selectedId = id;
       renderMarkers();
     },
-    resize() {
-      map?.resize();
+    focus(id) {
+      const cluster = clusters.find((c) => c.locationId === id);
+      if (cluster) {
+        selectedId = id;
+        map?.easeTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(cluster.level === 'LOCAL_AREA' ? 11 : 6, 4), duration: reducedMotion ? 0 : 420 });
+        renderMarkers();
+      }
+    },
+    setMode(m) {
+      _currentMode = m;
     },
     destroy() {
       for (const node of markers.values()) node.remove();
@@ -189,7 +166,6 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
       map?.off('click' as never);
       map?.remove();
       map = null;
-      void container;
     },
   };
 }

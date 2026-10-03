@@ -74,7 +74,7 @@ describe('buildSelectors', () => {
   it('reports hasSelection from the store', () => {
     const store = createStore(createInitialState());
     expect(buildSelectors(store.getState()).hasSelection).toBe(false);
-    store.dispatch({ type: 'select/project', projectId: 'eu-ai-factories' });
+    store.dispatch({ type: 'selection/set', id: 'eu-ai-factories' });
     expect(buildSelectors(store.getState()).hasSelection).toBe(true);
   });
 

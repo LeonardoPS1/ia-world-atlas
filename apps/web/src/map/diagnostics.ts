@@ -1,4 +1,6 @@
 export interface MapDiagnostics {
+  ok: boolean;
+  token: string | null;
   tokenPresent: boolean;
   webglAvailable: boolean;
   constructorError: string | null;
@@ -30,6 +32,8 @@ export function diagnoseMapEnvironment(options: {
 
   if (!tokenPresent) {
     return {
+      ok: false,
+      token: options.token ?? null,
       tokenPresent: false,
       webglAvailable,
       constructorError: null,
@@ -40,6 +44,8 @@ export function diagnoseMapEnvironment(options: {
   }
   if (!webglAvailable) {
     return {
+      ok: false,
+      token: options.token ?? null,
       tokenPresent: true,
       webglAvailable: false,
       constructorError: null,
@@ -49,6 +55,8 @@ export function diagnoseMapEnvironment(options: {
     };
   }
   return {
+    ok: true,
+    token: options.token ?? null,
     tokenPresent: true,
     webglAvailable: true,
     constructorError: null,
