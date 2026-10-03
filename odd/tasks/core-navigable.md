@@ -127,7 +127,7 @@ slot; nothing runs on its own.
 | 13 | Mapbox globe adapter, marker layer, clustering | 3 | done (`49446ce`) |
 | 14 | Data-only fallback map and diagnostics banner | 3 | done (`bfe82d3`) |
 | 15 | Shell, header, breadcrumb, status badge, legend | 3 | done (`195b926`) |
-| 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | pending |
+| 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | done (`7c2de6b`) |
 | 17 | Data controller, bootstrap and entry point | 4 | pending |
 | 18 | End-to-end suite with Playwright | 5 | pending |
 | 19 | Container images and the PostGIS compose stack | 5 | pending |
@@ -480,6 +480,27 @@ No AI attribution.
 falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
 
 **Mutation evidence:** revertir `addEventListener` en header rompe test de búsqueda y toggle rail; revertir `firstLine()` en statusBadge rompe test "never renders a stack trace"; revertir plan test-count produce mismatch.
+
+### 2026-10-03 — Task 16 closed as `7c2de6b`
+
+`feat(web): add rail scale controls drawer with safe sources and the timeline strip`, 12 files
+(4 components + 4 tests + CSS + plan), +1380/−10 (net +1370). No AI attribution.
+
+**Plan defects corrected (8):**
+1. `el()` no soporta `onClick` → `addEventListener` (rail, drawer, strip).
+2. `renderRail` handlers en refs → `RailRefs.handlers` + return en `createRail`.
+3. `drawer.ts`: `evidenceLevel` → `evidence` (contracts).
+4. `drawer.ts`: `endedAt` → `null` (ProjectSummary no lo tiene).
+5. `strip.ts`: slider min/max hardcoded → derivados de `selectors.yearOptions`.
+6. Test counts: Step 4 "25" → 39 (18 Task 15 + 21 Task 16); Step 8 "40" → 39.
+7. `drawer.ts`: `sourceLabel` → `sourceId` + lookup con `sourceLabel()` helper.
+8. `strip.ts`: `YEAR_FORMAT` con `new Date(year-01-01)` → `getUTCFullYear()`.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **290 passed | 19 skipped** (baseline 269 → +21). `npm run build`
+falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
+
+**Mutation evidence:** revertir `handlers` en rail rompe test de toggle; revertir `evidence` en drawer rompe test de metadata; revertir slider bounds rompe test de año; revertir plan test-count produce mismatch.
 
 ### Lessons — the subagent report is not the evidence
 
