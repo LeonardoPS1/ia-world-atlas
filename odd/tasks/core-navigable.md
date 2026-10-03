@@ -128,9 +128,9 @@ slot; nothing runs on its own.
 | 14 | Data-only fallback map and diagnostics banner | 3 | done (`bfe82d3`) |
 | 15 | Shell, header, breadcrumb, status badge, legend | 3 | done (`195b926`) |
 | 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | done (`7c2de6b`) |
-| 17 | Data controller, bootstrap and entry point | 4 | pending |
+| 17 | Data controller, bootstrap and entry point | 4 | done (`9ab4d78`) |
 | 18 | End-to-end suite with Playwright | 5 | pending |
-| 19 | Container images and the PostGIS compose stack | 5 | pending |
+| 19 | Container images and the PostGIS compose stack | 5 | done (`870159c`, `52f2ec3`, `e789ecc`; **deployed and verified on the VPS + Dokploy 2026-10-03** — see the plan addendum) |
 | 20 | README, operations notes and ADRs | 5 | pending |
 | 21 | Continuous integration | 5 | pending |
 | 22 | Final verification, spec PDF refresh and delivery | 5 | pending |
@@ -501,6 +501,64 @@ falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
 falla en `/src/main.ts` (Task 17). Sin nuevas fallas.
 
 **Mutation evidence:** revertir `handlers` en rail rompe test de toggle; revertir `evidence` en drawer rompe test de metadata; revertir slider bounds rompe test de año; revertir plan test-count produce mismatch.
+
+### 2026-10-03 — Task 19 deployed for real to the VPS + Dokploy
+
+Leonardo rejected the original "prepared, not deployed" scope: the stack had to
+run on his VPS with Dokploy. It was deployed and verified end to end.
+
+**Artifacts**
+
+- `docker-compose.dokploy.yml` (new, `65ca730`) — `db` (postgis/postgis:16-3.4) +
+  `api` + `web`; only `web` joins the external overlay `dokploy-network` so
+  Traefik can route it; `web` proxies `/api/` to `api:8787` (same origin, no
+  CORS); no published host ports.
+- `apps/api/Dockerfile` + `docker-compose*.yml` (`e789ecc`) — the runtime image
+  never copied `apps/api/seeds`, so `db:seed` could never run inside the
+  container (`ENOENT .../seeds/001_core_seed.sql`). Added the COPY and made the
+  api command run `migrate-cli.js && seed-cli.js && server.js` (the seed is
+  idempotent: `on conflict (id) do update` + `setval`).
+- `257b750` removed the unplanned `apps/web/e2e/debug.spec.ts` that broke
+  `npm run build` (TS18046).
+- `a41c36b` records this deployment in the plan (addendum) and the spec.
+
+**Target**
+
+- VPS `51.222.207.250`, Dokploy v0.30.8 (Swarm service, port 3000), Traefik
+  v3.6.7.
+- Dokploy project `ia-world-atlas` (`RW46AY-Bbx7M23PoR3EUE`), environment
+  `production` (`SzrJQZmxCatpbTodS-6WN`).
+- Compose app composeId `8tvgc5hay7sLqMQIEtNYa`, appName `iaworldatlas-ke469u`,
+  source `https://github.com/LeonardoPS1/ia-world-atlas` branch `core-navigable`,
+  composePath `./docker-compose.dokploy.yml`.
+- Domain `atlasia.aicorebots.com` (domainId `l0Q9xS_gGvyqEtbOXYAmv`, serviceName
+  `web`, port 80, domainType `compose`, certificateType `letsencrypt`,
+  uniqueConfigKey 45).
+
+**Verification (observed, not reported)**
+
+- `docker compose ls` → `iaworldatlas-ke469u running(3)`; three containers
+  healthy.
+- Direct to the VPS (`curl --resolve atlasia.aicorebots.com:443:127.0.0.1`):
+  `/healthz` → 200, `/api/health` → `database:"up"`, `/api/stats` → projects 5 /
+  locations 11 / sources 7, `/` → 200. Valid Let's Encrypt cert for the hostname.
+- Public `https://atlasia.aicorebots.com/` → HTTP/2 200, `<title>AI World
+  Atlas</title>`, `server: nginx/1.27.5`; `/healthz` → `ok`; `/api/stats` → the
+  seeded totals; `/api/projects` → real rows. The earlier Cloudflare 403 was a
+  transient zone-wide bot challenge (`n8n.aicorebots.com` behaves the same).
+
+**Operational notes**
+
+- Dokploy was driven through its REST API
+  (`http://localhost:3000/api/<router>.<procedure>`, header `x-api-key`). No
+  `dokploy` CLI exists and no API key was available, so a key was created
+  directly in Dokploy's Postgres `apikey` table (better-auth stores
+  base64url(SHA-256(plaintext))). Row id `atlasdeploykey8c499cbfb84a`;
+  removable at will.
+- `VITE_MAPBOX_TOKEN` is empty, so the globe degrades to the honest data-only
+  fallback map. Set the token and redeploy to enable Mapbox.
+- Dokploy Compose apps deploy as standalone `docker compose` containers, not
+  Swarm services — `docker service ls` will never show them.
 
 ### Lessons — the subagent report is not the evidence
 
