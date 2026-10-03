@@ -3,7 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8787),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DATABASE_URL: z.string().min(1).optional(),
   TEST_DATABASE_URL: z.string().optional(),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -29,7 +29,9 @@ export class EnvValidationError extends Error {
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
-  const parsed = envSchema.safeParse(source);
+  const useMemory = source['ATLAS_REPOS'] === 'memory';
+  const schema = useMemory ? envSchema : envSchema.required({ DATABASE_URL: true });
+  const parsed = schema.safeParse(source);
   if (!parsed.success) {
     throw new EnvValidationError(
       parsed.error.issues.map((issue) => `${issue.path.join('.') || 'env'}: ${issue.message}`),
@@ -43,7 +45,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   return {
     nodeEnv: NODE_ENV,
     port: PORT,
-    databaseUrl: DATABASE_URL,
+    databaseUrl: DATABASE_URL ?? '',
     corsOrigins: isWildcard ? ['*'] : corsOrigins,
     allowWildcardCors: isWildcard && NODE_ENV !== 'production',
     logLevel: LOG_LEVEL,

@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: '8787'
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required in production}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required in production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: >
+      sh -c "node apps/api/dist/db/migrate-cli.js && node apps/api/dist/server.js"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:?VITE_MAPBOX_TOKEN is required in production}
+        VITE_MAPBOX_STYLE: ${VITE_MAPBOX_STYLE:-mapbox://styles/mapbox/dark-v11}
+    ports:
+      - '${WEB_PORT:-8080}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

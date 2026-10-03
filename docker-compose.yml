@@ -2,20 +2,48 @@ services:
   db:
     image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-aiworldatlas}
       POSTGRES_USER: ${POSTGRES_USER:-atlas}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-    ports:
-      - "127.0.0.1:5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas}
+      POSTGRES_DB: ${POSTGRES_DB:-aiworldatlas}
     volumes:
-      - atlas-db-data:/var/lib/postgresql/data
+      - atlas-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atlas} -d ${POSTGRES_DB:-aiworldatlas}"]
-      interval: 5s
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-atlas} -d ${POSTGRES_DB:-aiworldatlas}']
+      interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 10s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: '8787'
+      DATABASE_URL: postgres://${POSTGRES_USER:-atlas}:${POSTGRES_PASSWORD:-atlas}@db:5432/${POSTGRES_DB:-aiworldatlas}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "node apps/api/dist/db/migrate-cli.js && node apps/api/dist/server.js"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-}
+        VITE_MAPBOX_STYLE: ${VITE_MAPBOX_STYLE:-mapbox://styles/mapbox/dark-v11}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '${WEB_PORT:-8080}:80'
     restart: unless-stopped
 
 volumes:
-  atlas-db-data:
+  atlas-db:

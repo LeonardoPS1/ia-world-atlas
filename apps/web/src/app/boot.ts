@@ -154,32 +154,49 @@ export function boot(options: BootOptions) {
 
   const factory = options.createMap ?? defaultMapFactory();
 
+  const forcedMode = new URLSearchParams(window.location.search).get('map');
+  const forceFallback = forcedMode === 'fallback';
+
   const ensureAdapter = (): void => {
     if (adapter || disposed) return;
-    const diagnostics = diagnoseMapEnvironment({
-      token: (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? '',
-    });
-    void factory(mapHost, diagnostics, (projectId) => {
-      store.dispatch({ type: 'selection/set', id: projectId });
-      void controller.refresh();
-    })
-      .then((created) => {
-        if (disposed) {
-          created.destroy();
-          return;
-        }
-        adapter = created;
-        if (!diagnostics.ok) {
-          store.dispatch({ type: 'map/mode', payload: { mode: 'fallback', reason: diagnostics.reason } });
-        } else {
-          store.dispatch({ type: 'map/mode', payload: { mode: 'globe' } });
-        }
-        // Force render now that adapter is ready
-        render();
-      })
-      .catch((error: unknown) => {
-        store.dispatch({ type: 'map/mode', payload: { mode: 'fallback', reason: error instanceof Error ? error.message : 'map-unavailable' } });
+    if (forceFallback) {
+      mapHost.dataset['mapMode'] = 'fallback';
+      adapter = createFallbackAdapter({
+        host: mapHost,
+        reason: 'Forced by the ?map=fallback query parameter',
+        onSelect: (projectId) => {
+          store.dispatch({ type: 'selection/set', id: projectId });
+          void controller.refresh();
+        },
+        width: mapHost.clientWidth,
+        height: mapHost.clientHeight,
       });
+    } else {
+      const diagnostics = diagnoseMapEnvironment({
+        token: (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? '',
+      });
+      void factory(mapHost, diagnostics, (projectId) => {
+        store.dispatch({ type: 'selection/set', id: projectId });
+        void controller.refresh();
+      })
+        .then((created) => {
+          if (disposed) {
+            created.destroy();
+            return;
+          }
+          adapter = created;
+          if (!diagnostics.ok) {
+            store.dispatch({ type: 'map/mode', payload: { mode: 'fallback', reason: diagnostics.reason } });
+          } else {
+            store.dispatch({ type: 'map/mode', payload: { mode: 'globe' } });
+          }
+          // Force render now that adapter is ready
+          render();
+        })
+        .catch((error: unknown) => {
+          store.dispatch({ type: 'map/mode', payload: { mode: 'fallback', reason: error instanceof Error ? error.message : 'map-unavailable' } });
+        });
+    }
   };
 
   const render = (): void => {
@@ -237,6 +254,7 @@ export function boot(options: BootOptions) {
       disposed = true;
       controller.dispose();
       adapter?.destroy();
+      drawer.dispose();
       clear(container);
     },
   };

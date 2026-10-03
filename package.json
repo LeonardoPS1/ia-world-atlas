@@ -13,7 +13,7 @@
     "typecheck": "npm run build -w @atlas/contracts && npm run typecheck -w @atlas/contracts -w @atlas/api -w @atlas/web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run test:e2e --workspace @atlas/web",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "db:migrate": "npm run db:migrate --workspace @atlas/api",
     "db:seed": "npm run db:seed --workspace @atlas/api",

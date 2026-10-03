@@ -155,7 +155,7 @@ export function reduce(state: AtlasState, action: Action): AtlasState {
     case 'data/detail':
       return { ...state, detail: action.payload };
     case 'data/error':
-      return { ...state, api: { status: 'error', detail: action.detail } };
+      return { ...state };
     case 'api/healthy':
       return { ...state, api: { status: 'ok', detail: null } };
     case 'api/unhealthy':

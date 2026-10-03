@@ -16,6 +16,7 @@ export interface DrawerRefs {
   title: HTMLElement;
   body: HTMLElement;
   close: HTMLButtonElement;
+  dispose: () => void;
 }
 
 const INTENT_LABEL: Record<string, string> = {
@@ -55,7 +56,13 @@ export function createDrawer(root: HTMLElement, handlers: DrawerHandlers): Drawe
   const header = el('div', { class: 'drawer-header' }, [title, close]);
   const body = el('div', { class: 'drawer-body' });
   root.append(header, body);
-  return { root, title, body, close };
+
+  const onKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && !root.hidden) handlers.onClose();
+  };
+  root.addEventListener('keydown', onKeydown);
+
+  return { root, title, body, close, dispose: () => root.removeEventListener('keydown', onKeydown) };
 }
 
 export function renderDrawer(

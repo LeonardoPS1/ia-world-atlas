@@ -7,15 +7,16 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@atlas/contracts": "*",
     "mapbox-gl": "^3.9.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.1",
-    "@playwright/test": "^1.49.1",
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@types/mapbox-gl": "^3.4.1",
