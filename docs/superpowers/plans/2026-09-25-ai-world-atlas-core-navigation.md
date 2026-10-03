@@ -7323,7 +7323,7 @@ export function markerSizeFor(level: LocationLevel, density: number): number {
 - [ ] **Step 8: Run the state tests and confirm they pass**
 
 Run: `npx vitest run --project web apps/web/src/state`
-Expected: PASS, 4 files / 19 tests.
+Expected: PASS, 5 files / 30 tests (colors 7 + filters 7 + timeline 4 + geo 8 + palette 4).
 
 - [ ] **Step 9: Write the failing store test**
 
@@ -7618,7 +7618,7 @@ export function createStore(initial: AtlasState): Store {
 - [ ] **Step 11: Run the whole web unit suite and typecheck**
 
 Run: `npx vitest run --project web && npm run typecheck -w @atlas/web`
-Expected: PASS, 9 files / 37 tests; `tsc --noEmit` clean. The `data/events` branch keeps the switch exhaustive; if `@typescript-eslint` reports the unused action, destructure it as `_action` rather than adding a rule exception.
+Expected: PASS, 11 files / 67 tests; `tsc --noEmit` clean. The `data/events` branch keeps the switch exhaustive; if `@typescript-eslint` reports the unused action, destructure it as `_action` rather than adding a rule exception.
 
 - [ ] **Step 12: Commit**
 

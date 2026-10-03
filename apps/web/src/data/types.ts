@@ -13,6 +13,7 @@ import type {
   ProjectStatus,
   EvidenceLevel,
   LocationLevel,
+  HealthResponse,
 } from '@atlas/contracts';
 
 export type {
@@ -28,11 +29,12 @@ export type {
   ProjectStatus,
   EvidenceLevel,
   LocationLevel,
+  HealthResponse,
 };
 
 // Local type aliases for compatibility with plan's naming
 export type Project = ProjectSummary;
 export type EventRecord = Event;
 export type RelationRecord = Relation;
-export type EvidenceIntent = EvidenceLevel;
+export type EvidenceIntent = 'OBSERVED' | 'EXPECTED' | 'UNCONFIRMED';
 export type EventKind = string;
