@@ -1,0 +1,34 @@
+:root {
+  --color-obsidian: #08090c;
+  --color-ink: #11141a;
+  --color-warm-white: #e9e6df;
+  --color-electric-blue: #4b8cff;
+  --color-ultraviolet: #8567ff;
+  --color-mint: #70d6b2;
+  --color-amber: #e5a84b;
+  --color-ice: #70c8e8;
+  --color-coral: #e47c71;
+  --color-lime: #a9d66f;
+  --color-lavender: #b59aff;
+
+  --color-ink-raised: #171b23;
+  --color-line: #232936;
+  --color-line-strong: #313848;
+  --color-text-dim: #9aa3b2;
+  --color-text-faint: #6b7484;
+
+  --duration-fast: 160ms;
+  --duration-base: 280ms;
+  --duration-slow: 420ms;
+  --ease-atlas: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --header-height: 56px;
+  --strip-height: 132px;
+  --rail-width: 320px;
+  --drawer-width: 400px;
+
+  --font-ui: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', 'Georgia', serif;
+
+  color-scheme: dark;
+}

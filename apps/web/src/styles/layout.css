@@ -1,0 +1,129 @@
+.atlas {
+  display: grid;
+  grid-template-rows: var(--header-height) 1fr var(--strip-height);
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'header header header'
+    'rail   map    drawer'
+    'strip  strip  strip';
+  height: 100%;
+  background: var(--color-obsidian);
+}
+
+.atlas-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-ink);
+}
+
+.atlas-rail {
+  grid-area: rail;
+  width: var(--rail-width);
+  overflow-y: auto;
+  border-right: 1px solid var(--color-line);
+  background: var(--color-ink);
+  transition: transform var(--duration-base) var(--ease-atlas);
+}
+
+.atlas-rail[hidden] {
+  display: none;
+}
+
+.atlas-map {
+  grid-area: map;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.atlas-drawer {
+  grid-area: drawer;
+  width: var(--drawer-width);
+  overflow-y: auto;
+  border-left: 1px solid var(--color-line);
+  background: var(--color-ink);
+  transition: transform var(--duration-base) var(--ease-atlas);
+}
+
+.atlas-drawer[hidden] {
+  display: none;
+}
+
+.atlas-strip {
+  grid-area: strip;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-ink);
+}
+
+@media (min-width: 1100px) {
+  .atlas:not(:has(.atlas-drawer[hidden])) {
+    grid-template-columns: auto 1fr var(--drawer-width);
+  }
+}
+
+@media (max-width: 1099px) {
+  .atlas {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'header'
+      'map'
+      'strip';
+  }
+
+  .atlas-rail {
+    position: absolute;
+    top: var(--header-height);
+    bottom: var(--strip-height);
+    left: 0;
+    z-index: 20;
+    width: min(320px, 85vw);
+  }
+
+  .atlas-drawer {
+    position: absolute;
+    top: var(--header-height);
+    bottom: var(--strip-height);
+    right: 0;
+    z-index: 25;
+    width: min(360px, 92vw);
+  }
+}
+
+@media (max-width: 699px) {
+  .atlas {
+    grid-template-rows: var(--header-height) 1fr auto;
+  }
+
+  .atlas-rail {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 55vh;
+    border-right: none;
+    border-top: 1px solid var(--color-line);
+  }
+
+  .atlas-drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 70vh;
+    border-left: none;
+    border-top: 1px solid var(--color-line);
+    border-radius: 12px 12px 0 0;
+  }
+}

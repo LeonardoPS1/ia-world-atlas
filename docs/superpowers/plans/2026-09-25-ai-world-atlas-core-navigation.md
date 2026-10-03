@@ -5236,7 +5236,8 @@ describe('el', () => {
   it('sets attributes and skips null, undefined and false values', () => {
     const node = el('div', { id: 'x', 'aria-hidden': true, hidden: false, title: null, lang: undefined });
     expect(node.id).toBe('x');
-    expect(node.getAttribute('aria-hidden')).toBe('true');
+    expect(node.hasAttribute('aria-hidden')).toBe(true);
+    expect(node.getAttribute('aria-hidden')).toBe('');
     expect(node.hasAttribute('hidden')).toBe(false);
     expect(node.hasAttribute('title')).toBe(false);
   });
@@ -5472,7 +5473,7 @@ describe('icon', () => {
 - [ ] **Step 7: Run the web unit tests and confirm they pass**
 
 Run: `npx vitest run --project web apps/web/src/ui apps/web/src/data`
-Expected: PASS, 3 files / 10 tests.
+Expected: PASS, 3 files / 11 tests.
 
 - [ ] **Step 8: Write the four stylesheets**
 
@@ -6161,7 +6162,7 @@ Expected: both removed. The repository must not contain two competing frontends.
 - [ ] **Step 10: Run the web unit tests, lint and typecheck**
 
 Run: `npx vitest run --project web && npm run lint`
-Expected: PASS, 3 files / 10 tests, and ESLint clean. `@typescript-eslint/no-explicit-any` is an error in the flat config, so if a test needs `any`, change the type rather than the rule.
+Expected: PASS, 3 files / 11 tests, and ESLint clean. `@typescript-eslint/no-explicit-any` is an error in the flat config, so if a test needs `any`, change the type rather than the rule.
 
 - [ ] **Step 11: Commit**
 
