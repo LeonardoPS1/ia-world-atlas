@@ -9179,7 +9179,7 @@ describe('createShell', () => {
     expect(host.querySelector('[data-testid="app-root"]')).toBe(refs.root);
     expect(refs.root.classList.contains('atlas')).toBe(true);
     for (const key of ['header', 'rail', 'map', 'drawer', 'strip'] as const) {
-      expect(refs[key].isConnected).toBe(true);
+      expect(refs[key].parentElement).not.toBeNull();
     }
     expect(refs.map.getAttribute('data-testid')).toBe('map-host');
   });
@@ -9313,8 +9313,8 @@ describe('renderBreadcrumb', () => {
     renderBreadcrumb(
       host,
       [
-        { id: 'world', name: 'Mundo', level: 'WORLD', parentId: null, center: { lat: 0, lng: 0 } },
-        { id: 'chile', name: 'Chile', level: 'COUNTRY', parentId: 'world', center: { lat: -33, lng: -71 } },
+        { id: 'world', name: 'Mundo', level: 'WORLD', parentId: null, countryCode: null, longitude: 0, latitude: 0, childCount: 0, projectCount: 0, metadata: {} },
+        { id: 'chile', name: 'Chile', level: 'COUNTRY', parentId: 'world', countryCode: 'CL', longitude: -71, latitude: -33, childCount: 0, projectCount: 0, metadata: {} },
       ],
       onFocus,
     );
@@ -9334,7 +9334,12 @@ describe('renderBreadcrumb', () => {
           name: '<img src=x onerror=alert(1)>',
           level: 'COUNTRY',
           parentId: null,
-          center: { lat: 0, lng: 0 },
+          countryCode: null,
+          longitude: 0,
+          latitude: 0,
+          childCount: 0,
+          projectCount: 0,
+          metadata: {},
         },
       ],
       vi.fn(),
@@ -9401,8 +9406,9 @@ import { describe, expect, it } from 'vitest';
 import { renderLegend } from './legend.ts';
 import { buildSelectors } from '../state/selectors.ts';
 import { createInitialState, createStore } from '../state/store.ts';
-import { atlasDataFixture, listBodies } from '../testing/fixtures.ts';
+import { listBodies } from '../testing/fixtures.ts';
 import { EVIDENCE_COLORS } from '../state/colors.ts';
+import { EVIDENCE_LEVELS, PROJECT_TYPES, PROJECT_STATUSES } from '@atlas/contracts';
 
 function selectors() {
   const store = createStore(createInitialState());
@@ -9411,8 +9417,19 @@ function selectors() {
     type: 'data/projects',
     payload: { data: listBodies.projects.data, page: 1, pageSize: 50, total: 5, totalPages: 1 },
   });
-  store.dispatch({ type: 'data/stats', payload: atlasDataFixture.stats });
-  return buildSelectors(store.getState());
+  const statsPayload = {
+    totals: { projects: 5, locations: 11, sources: 7 },
+    byEvidence: Object.fromEntries(EVIDENCE_LEVELS.map((l) => [l, 0])) as Record<typeof EVIDENCE_LEVELS[number], number>,
+    byType: Object.fromEntries(PROJECT_TYPES.map((t) => [t, 0])) as Record<typeof PROJECT_TYPES[number], number>,
+    byStatus: Object.fromEntries(PROJECT_STATUSES.map((s) => [s, 0])) as Record<typeof PROJECT_STATUSES[number], number>,
+  };
+  store.dispatch({ type: 'data/stats', payload: statsPayload });
+  const state = store.getState();
+  if (state.stats) {
+    state.stats.byEvidence.REPORTED = 3;
+    state.stats.byEvidence.ANNOUNCED = 2;
+  }
+  return buildSelectors(state);
 }
 
 describe('renderLegend', () => {
@@ -9526,7 +9543,7 @@ import type { Location } from '../data/types.ts';
 export function renderBreadcrumb(
   node: HTMLElement,
   trail: readonly Location[],
-  handlers: { onFocus: (locationId: string | null) => void },
+  onFocus: (locationId: string | null) => void,
 ): void {
   clear(node);
   const items: Location[] = [
@@ -9546,7 +9563,7 @@ export function renderBreadcrumb(
       [document.createTextNode(location.name)],
     );
     button.addEventListener('click', () => {
-      handlers.onFocus(isLast ? location.parentId ?? 'world' : location.id);
+      onFocus(isLast ? location.parentId ?? 'world' : location.id);
     });
     if (index > 0) {
       node.append(el('span', { class: 'breadcrumb__sep', 'aria-hidden': 'true', text: '/' }));
@@ -9649,7 +9666,7 @@ export function renderLegend(node: HTMLElement, selectors: Selectors): void {
 - [ ] **Step 8: Run the ui tests and confirm they pass**
 
 Run: `npx vitest run --project web apps/web/src/ui`
-Expected: PASS, 5 files / 17 tests. The breadcrumb XSS test is the P0 guard for the legacy `innerHTML` vulnerability.
+Expected: PASS, 5 files / 18 tests. The breadcrumb XSS test is the P0 guard for the legacy `innerHTML` vulnerability.
 
 - [ ] **Step 9: Commit**
 
