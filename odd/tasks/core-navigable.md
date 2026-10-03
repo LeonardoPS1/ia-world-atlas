@@ -124,7 +124,7 @@ slot; nothing runs on its own.
 | 10 | Typed API client with runtime contract validation | 3 | done (`46aa6de`) |
 | 11 | Application state, semantic colour mapping, selection rules | 3 | done (`e312097`) |
 | 12 | Derived view state and accent normalisation | 3 | done (`5e44a20`) |
-| 13 | Mapbox globe adapter, marker layer, clustering | 3 | pending |
+| 13 | Mapbox globe adapter, marker layer, clustering | 3 | done (`49446ce`) |
 | 14 | Data-only fallback map and diagnostics banner | 3 | pending |
 | 15 | Shell, header, breadcrumb, status badge, legend | 3 | pending |
 | 16 | Rail, filters, scale controls, drawer, sources, timeline strip | 3 | pending |
@@ -418,6 +418,26 @@ test-count lines produces mismatches.
 fails on missing `/src/main.ts` (Task 17). No new failures.
 
 **Mutation evidence:** reverting `pickAccent` or default accent breaks "fixed palette only" and `accent` tests; reverting plan test-count lines produces mismatches.
+
+### 2026-10-03 — Task 13 closed as `49446ce`
+
+`feat(web): add map diagnostics clustering markers and the globe adapter`, 10 files
+(4 map modules + 4 tests + CSS + plan), +920/−10 (net +910). No AI attribution.
+
+**Plan defects corrected (5):**
+1. `markers.test.ts` uses `MARKER_SHAPES[level]` from `palette.ts` (not hardcoded `diamond`/`circle` ternary).
+2. Fixture IDs: `valparaiso-city` → `valparaiso` (Task 5 fixture).
+3. `globe.ts`: `let container` (not `const`), `map?.fire('load')` in mount, `map?.off('click')` in destroy.
+4. Plan Step 8: "3 files / 13 tests" → "3 files / 14 tests" (diagnostics 4 + cluster 4 + markers 6).
+5. Plan Step 12: "4 files / 20 tests" → "4 files / 19 tests" (add globe 5).
+
+**Constraints held:** No `rotateTo` call anywhere; `setProjection` never called on init (projection chosen via constructor option `projection: 'globe'`). Marker layer uses structural `MapLike` type, not Mapbox typings.
+
+**Gates:** `npm run typecheck` exit 0. `npm run lint` **0 errors**.
+`npm test` **242 passed | 19 skipped** (baseline 223 → +19). `npm run build`
+fails on missing `/src/main.ts` (Task 17). No new failures.
+
+**Mutation evidence:** reverting `MARKER_SHAPES` import breaks "different glyph per level" test; reverting `let container` breaks typecheck; reverting plan test-count lines produces mismatches.
 
 ### Lessons — the subagent report is not the evidence
 
