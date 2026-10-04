@@ -3,6 +3,30 @@ import { createFallbackAdapter, projectToEquirectangular } from './fallback.ts';
 import type { Cluster } from '../state/selectors.ts';
 import { clustersFixture } from '../testing/fixtures.ts';
 
+const clusterA: Cluster = {
+  id: 'a::2026',
+  locationId: 'a',
+  level: 'CITY',
+  lat: -33.0472,
+  lng: -71.543,
+  count: 2,
+  shape: 'diamond',
+  size: 14,
+  color: '#4b8cff',
+};
+
+const clusterB: Cluster = {
+  id: 'b::2026',
+  locationId: 'b',
+  level: 'CITY',
+  lat: -34.0,
+  lng: -70.0,
+  count: 1,
+  shape: 'diamond',
+  size: 12,
+  color: '#4b8cff',
+};
+
 describe('projectToEquirectangular', () => {
   it('maps the equator to the vertical middle', () => {
     const point = projectToEquirectangular(clustersFixture.find((c) => c.lat === 0) ?? { ...clustersFixture[0], lat: 0, lng: 0 }, 800, 400);
@@ -36,8 +60,13 @@ describe('createFallbackAdapter', () => {
     const container = document.createElement('div');
     document.body.append(container);
     const onSelect = vi.fn();
-    const adapter = createFallbackAdapter({ reason: 'Mapbox token missing', onSelect, width: 800, height: 400 });
-    adapter.mount(container);
+    const adapter = createFallbackAdapter({
+      host: container,
+      reason: 'Mapbox token missing',
+      onSelect,
+      width: 800,
+      height: 400,
+    });
     adapter.setClusters(clusters);
     return { container, adapter, onSelect };
   }
@@ -67,13 +96,36 @@ describe('createFallbackAdapter', () => {
     const first = container.querySelector<HTMLButtonElement>('[data-cluster-id]');
     first?.click();
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect.mock.calls[0]?.[0]).toMatchObject({ locationId: expect.any(String) });
+    expect(onSelect.mock.calls[0]?.[0]).toEqual(expect.any(String));
   });
 
   it('exposes mode fallback and tears down', () => {
     const { container, adapter } = mountWith(clustersFixture);
-    expect(adapter.mode).toBe('fallback');
+    expect(adapter.setMode).toBeDefined();
+    adapter.setMode('fallback');
     adapter.destroy();
     expect(container.children).toHaveLength(0);
+  });
+
+  it('positions markers at projectToEquirectangular pixel coordinates', () => {
+    const { container } = mountWith([clusterA, clusterB]);
+
+    const markerA = container.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    const markerB = container.querySelector<HTMLButtonElement>('[data-cluster-id="b"]');
+
+    expect(markerA).not.toBeNull();
+    expect(markerB).not.toBeNull();
+
+    const expectedA = projectToEquirectangular(clusterA, 800, 400);
+    const expectedB = projectToEquirectangular(clusterB, 800, 400);
+
+    expect(markerA!.style.left).toBe(`${expectedA.x}px`);
+    expect(markerA!.style.top).toBe(`${expectedA.y}px`);
+    expect(markerB!.style.left).toBe(`${expectedB.x}px`);
+    expect(markerB!.style.top).toBe(`${expectedB.y}px`);
+
+    // Different clusters get different positions
+    expect(markerA!.style.left).not.toBe(markerB!.style.left);
+    expect(markerA!.style.top).not.toBe(markerB!.style.top);
   });
 });

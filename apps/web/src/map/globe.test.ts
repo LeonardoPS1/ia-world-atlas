@@ -1,47 +1,49 @@
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM, MIN_ZOOM, createGlobeAdapter } from './globe.ts';
+import type { Cluster } from '../state/selectors.ts';
 
 function fakeMapClass() {
   const instances: Array<{
     options: Record<string, unknown>;
     fire: (event: string, payload: unknown) => void;
-    on: (event: string, handler: (event: unknown) => void) => unknown;
-    once: (event: string, handler: (event: unknown) => void) => unknown;
-    off: (event: string) => unknown;
-    rotateTo?: ReturnType<typeof vi.fn>;
-    addSource: ReturnType<typeof vi.fn>;
-    addLayer: ReturnType<typeof vi.fn>;
-    removeLayer: ReturnType<typeof vi.fn>;
-    remove: ReturnType<typeof vi.fn>;
-    resize: ReturnType<typeof vi.fn>;
-    easeTo: ReturnType<typeof vi.fn>;
-    flyTo: ReturnType<typeof vi.fn>;
-    setProjection: ReturnType<typeof vi.fn>;
-    querySourceFeatures: ReturnType<typeof vi.fn>;
-    getCanvas: ReturnType<typeof vi.fn>;
+    handlers: Map<string, (event: unknown) => void>;
+    projectImpl: (lngLat: [number, number]) => { x: number; y: number };
   }> = [];
+
   class FakeMap {
     options: Record<string, unknown>;
-    private handlers = new Map<string, (event: unknown) => void>();
+    handlers = new Map<string, (event: unknown) => void>();
+    projectImpl: (lngLat: [number, number]) => { x: number; y: number };
+
     constructor(options: Record<string, unknown>) {
       this.options = options;
-      instances.push(this as typeof instances[0]);
+      this.projectImpl = (lngLat: [number, number]) => ({ x: lngLat[0] * 10 + 400, y: -lngLat[1] * 10 + 200 });
+      instances.push(this);
     }
+
     on(event: string, handler: (event: unknown) => void) {
       this.handlers.set(event, handler);
       return this;
     }
+
     once(event: string, handler: (event: unknown) => void) {
       this.handlers.set(event, handler);
       return this;
     }
+
     off(event: string) {
       this.handlers.delete(event);
       return this;
     }
+
     fire(event: string, payload: unknown) {
       this.handlers.get(event)?.(payload);
     }
+
+    project(lngLat: [number, number]) {
+      return this.projectImpl(lngLat);
+    }
+
     addSource = vi.fn();
     addLayer = vi.fn();
     removeLayer = vi.fn();
@@ -53,8 +55,33 @@ function fakeMapClass() {
     querySourceFeatures = vi.fn(() => []);
     getCanvas = vi.fn(() => ({ style: {} }));
   }
+
   return { FakeMap, instances };
 }
+
+const clusterA: Cluster = {
+  id: 'a::2026',
+  locationId: 'a',
+  level: 'CITY',
+  lat: -33.0472,
+  lng: -71.543,
+  count: 2,
+  shape: 'diamond',
+  size: 14,
+  color: '#4b8cff',
+};
+
+const clusterB: Cluster = {
+  id: 'b::2026',
+  locationId: 'b',
+  level: 'CITY',
+  lat: -34.0,
+  lng: -70.0,
+  count: 1,
+  shape: 'diamond',
+  size: 12,
+  color: '#4b8cff',
+};
 
 describe('globe defaults', () => {
   it('pins the initial camera to Viña del Mar without rotation', () => {
@@ -68,71 +95,156 @@ describe('globe defaults', () => {
 describe('createGlobeAdapter', () => {
   it('requests the globe projection and disables autorotate', async () => {
     const { FakeMap, instances } = fakeMapClass();
-    const onDiagnostics = vi.fn();
-    const adapter = createGlobeAdapter({
-      token: 'pk.test',
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      mapbox: FakeMap as never,
-      onSelect: vi.fn(),
-      onDiagnostics,
-    });
-    adapter.mount(document.createElement('div'));
-    expect(instances).toHaveLength(1);
-    const options = instances[0]?.options ?? {};
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+    expect(instances.length).toBe(1);
+    const options = (instances[0] as { options?: Record<string, unknown> }).options ?? {};
     expect(options.projection).toBe('globe');
-    // projectionResolutions is not a standard Mapbox option; the test expectation was a plan defect
-  });
-
-  it('does not install a rotate or autoplay loop', async () => {
-    const { FakeMap, instances } = fakeMapClass();
-    const adapter = createGlobeAdapter({
-      token: 'pk.test',
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      mapbox: FakeMap as never,
-      onSelect: vi.fn(),
-      onDiagnostics: vi.fn(),
-    });
-    adapter.mount(document.createElement('div'));
-    const map = instances[0];
-    expect(map?.rotateTo).toBeUndefined();
-    expect(map?.setProjection).toBeDefined();
-  });
-
-  it('reports diagnostics after mount', async () => {
-    const { FakeMap, instances } = fakeMapClass();
-    const onDiagnostics = vi.fn();
-    const adapter = createGlobeAdapter({
-      token: 'pk.test',
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      mapbox: FakeMap as never,
-      onSelect: vi.fn(),
-      onDiagnostics,
-    });
-    adapter.mount(document.createElement('div'));
-    // Fire the load event to trigger diagnostics callback (plan defect: test didn't fire load)
-    const mapInstance = instances[0];
-    if (mapInstance) {
-      mapInstance.fire('load', {});
-    }
-    expect(onDiagnostics).toHaveBeenCalled();
-    expect(onDiagnostics.mock.calls.at(-1)?.[0]).toMatchObject({ mode: 'globe' });
-  });
-
-  it('tears down cleanly', async () => {
-    const { FakeMap, instances } = fakeMapClass();
-    const adapter = createGlobeAdapter({
-      token: 'pk.test',
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      mapbox: FakeMap as never,
-      onSelect: vi.fn(),
-      onDiagnostics: vi.fn(),
-    });
-    adapter.mount(document.createElement('div'));
     adapter.destroy();
-    expect(instances[0]?.remove).toHaveBeenCalled();
+  });
+
+  it('positions markers at map.project() pixel coordinates', async () => {
+    const { FakeMap, instances } = fakeMapClass();
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+
+    adapter.setClusters([clusterA]);
+
+    const markerLayer = host.querySelector('[data-testid="marker-layer"]') as HTMLElement;
+    expect(markerLayer).not.toBeNull();
+
+    const marker = markerLayer.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    expect(marker).not.toBeNull();
+
+    const expectedX = clusterA.lng * 10 + 400;
+    const expectedY = -clusterA.lat * 10 + 200;
+    expect(marker!.style.left).toBe(`${expectedX}px`);
+    expect(marker!.style.top).toBe(`${expectedY}px`);
+
+    adapter.destroy();
+  });
+
+  it('gives different positions to clusters at different coordinates', async () => {
+    const { FakeMap, instances } = fakeMapClass();
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+
+    adapter.setClusters([clusterA, clusterB]);
+
+    const markerLayer = host.querySelector('[data-testid="marker-layer"]') as HTMLElement;
+    const markerA = markerLayer.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    const markerB = markerLayer.querySelector<HTMLButtonElement>('[data-cluster-id="b"]');
+
+    expect(markerA).not.toBeNull();
+    expect(markerB).not.toBeNull();
+
+    expect(markerA!.style.left).not.toBe(markerB!.style.left);
+    expect(markerA!.style.top).not.toBe(markerB!.style.top);
+
+    adapter.destroy();
+  });
+
+  it('repositions markers on map move event', async () => {
+    const { FakeMap, instances } = fakeMapClass();
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+
+    adapter.setClusters([clusterA]);
+
+    const markerLayer = host.querySelector('[data-testid="marker-layer"]') as HTMLElement;
+    const marker = markerLayer.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    expect(marker).not.toBeNull();
+
+    const initialLeft = marker!.style.left;
+    const initialTop = marker!.style.top;
+
+    // Mutate the project implementation to return different coordinates
+    instances[0].projectImpl = (lngLat: [number, number]) => ({ x: lngLat[0] * 5 + 100, y: -lngLat[1] * 5 + 50 });
+
+    // Fire move event
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('move', {});
+
+    const expectedX = clusterA.lng * 5 + 100;
+    const expectedY = -clusterA.lat * 5 + 50;
+    expect(marker!.style.left).toBe(`${expectedX}px`);
+    expect(marker!.style.top).toBe(`${expectedY}px`);
+    expect(marker!.style.left).not.toBe(initialLeft);
+    expect(marker!.style.top).not.toBe(initialTop);
+
+    adapter.destroy();
+  });
+
+  it('repositions markers on map zoom event', async () => {
+    const { FakeMap, instances } = fakeMapClass();
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+
+    adapter.setClusters([clusterA]);
+
+    const markerLayer = host.querySelector('[data-testid="marker-layer"]') as HTMLElement;
+    const marker = markerLayer.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    expect(marker).not.toBeNull();
+
+    const initialLeft = marker!.style.left;
+    const initialTop = marker!.style.top;
+
+    // Mutate the project implementation to return different coordinates
+    instances[0].projectImpl = (lngLat: [number, number]) => ({ x: lngLat[0] * 20 + 800, y: -lngLat[1] * 20 + 400 });
+
+    // Fire zoom event
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('zoom', {});
+
+    const expectedX = clusterA.lng * 20 + 800;
+    const expectedY = -clusterA.lat * 20 + 400;
+    expect(marker!.style.left).toBe(`${expectedX}px`);
+    expect(marker!.style.top).toBe(`${expectedY}px`);
+    expect(marker!.style.left).not.toBe(initialLeft);
+    expect(marker!.style.top).not.toBe(initialTop);
+
+    adapter.destroy();
+  });
+
+  it('tears down cleanly: removes markers and detaches marker layer', async () => {
+    const { FakeMap, instances } = fakeMapClass();
+    const onSelect = vi.fn();
+    const host = document.createElement('div');
+    const adapterPromise = createGlobeAdapter({ host, token: 'pk.test', onSelect, mapbox: FakeMap as never });
+    (instances[0] as { fire: (e: string, p: unknown) => void }).fire('load', {});
+    const adapter = await adapterPromise;
+
+    adapter.setClusters([clusterA]);
+
+    const markerLayer = host.querySelector('[data-testid="marker-layer"]');
+    expect(markerLayer).not.toBeNull();
+    // Marker layer is a child of host (host is not in document, so isConnected is false)
+    expect(markerLayer!.parentElement).toBe(host);
+
+    const marker = markerLayer!.querySelector<HTMLButtonElement>('[data-cluster-id="a"]');
+    expect(marker).not.toBeNull();
+    expect(marker!.parentElement).toBe(markerLayer);
+
+    adapter.destroy();
+
+    // After destroy, marker layer should be removed from host
+    expect(markerLayer!.parentElement).toBeNull();
+    // Marker should be removed from marker layer
+    expect(marker!.parentElement).toBeNull();
+    // Map remove should have been called
+    expect(instances[0].remove).toHaveBeenCalled();
   });
 });

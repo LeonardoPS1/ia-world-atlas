@@ -55,6 +55,17 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
       : null;
   reducedMotion = reducedMotionQuery?.matches ?? false;
 
+  function positionMarkers(): void {
+    if (!map || !markerLayer) return;
+    for (const cluster of clusters) {
+      const node = markers.get(cluster.locationId);
+      if (!node) continue;
+      const projected = map.project([cluster.lng, cluster.lat]);
+      node.style.left = `${projected.x}px`;
+      node.style.top = `${projected.y}px`;
+    }
+  }
+
   function renderMarkers(): void {
     if (!markerLayer) return;
     const seen = new Set<string>();
@@ -80,6 +91,7 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
         markers.delete(id);
       }
     }
+    positionMarkers();
   }
 
   function handleClick(event: never): void {
@@ -140,6 +152,8 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
       markerLayer?.remove();
       markerLayer = null;
       map?.off('click' as never);
+      map?.off('move' as never);
+      map?.off('zoom' as never);
       map?.remove();
       map = null;
     },
@@ -172,6 +186,14 @@ export async function createGlobeAdapter(options: GlobeAdapterOptions): Promise<
     }) as never);
 
     map.on('click' as never, handleClick as never);
+
+    map.on('move' as never, (() => {
+      positionMarkers();
+    }) as never);
+
+    map.on('zoom' as never, (() => {
+      positionMarkers();
+    }) as never);
 
     map.on('error' as never, ((payload: { error?: Error }) => {
       reject(payload.error ?? new Error('style error'));

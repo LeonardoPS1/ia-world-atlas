@@ -7,6 +7,6 @@ export default defineConfig({
     name: 'web',
     environment: 'jsdom',
     setupFiles: ['./src/testing/setup.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', 'src/map/globe.test.ts', 'src/map/fallback.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**'],
   },
 });

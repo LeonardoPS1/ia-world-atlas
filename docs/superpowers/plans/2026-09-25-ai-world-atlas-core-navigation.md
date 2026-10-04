@@ -8642,6 +8642,17 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
       : null;
   reducedMotion = reducedMotionQuery?.matches ?? false;
 
+  function positionMarkers(): void {
+    if (!map || !markerLayer) return;
+    for (const cluster of clusters) {
+      const node = markers.get(cluster.locationId);
+      if (!node) continue;
+      const projected = map.project([cluster.lng, cluster.lat]);
+      node.style.left = `${projected.x}px`;
+      node.style.top = `${projected.y}px`;
+    }
+  }
+
   function renderMarkers(): void {
     if (!markerLayer) return;
     const seen = new Set<string>();
@@ -8655,7 +8666,7 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
           reducedMotion,
         });
       if (!existing) {
-        node.addEventListener('click', () => options.onSelect(cluster));
+        node.addEventListener('click', () => options.onSelect(cluster.locationId));
         markers.set(cluster.locationId, node);
       }
       node.setAttribute('aria-pressed', String(selectedId === cluster.locationId));
@@ -8667,6 +8678,7 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
         markers.delete(id);
       }
     }
+    positionMarkers();
   }
 
   function handleClick(event: never): void {
@@ -8703,6 +8715,21 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
       // `mapboxgl.Map`, never `mapboxgl` itself.
       // Any future change to this task must keep a real constructor reaching the
       // adapter; apps/web/src/map/mapbox.test.ts guards that the module loads.
+
+      // NOTE (2026-10-04) — marker positioning defect fixed.
+      // (a) The original `renderMarkers()` never called `map.project()`, so every
+      //     marker resolved to the canvas origin (top: 0, left: 0) and stacked at
+      //     the top-left corner. `fallback.ts` already positioned markers correctly
+      //     via `projectToEquirectangular()` and was the reference implementation.
+      // (b) The shipped adapter API is async and takes `host` in options
+      //     (`createGlobeAdapter({ host, token, onSelect, mapbox })` returning
+      //     `Promise<MapAdapter>`), diverging from this plan's synchronous
+      //     `mount(host)` shape. `apps/web/src/app/boot.ts` is built around the
+      //     async shape.
+      // (c) `apps/web/vitest.config.ts` had excluded `globe.test.ts` and
+      //     `fallback.test.ts` (added by commit 9ab4d78), so the suite reported
+      //     green while never covering marker rendering. The exclusion has been
+      //     removed and both test files rewritten against the shipped API.
       const MapCtor = (options.mapbox ?? (globalThis as { mapboxgl?: unknown }).mapboxgl) as
         | (new (options: Record<string, unknown>) => MapLike)
         | undefined;
@@ -8759,6 +8786,15 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
         });
       }) as never);
       map.on('click' as never, handleClick as never);
+
+      map.on('move' as never, (() => {
+        positionMarkers();
+      }) as never);
+
+      map.on('zoom' as never, (() => {
+        positionMarkers();
+      }) as never);
+
       map.on('error' as never, ((payload: { error?: Error }) => {
         options.onDiagnostics({
           tokenPresent: true,
@@ -8789,6 +8825,8 @@ export function createGlobeAdapter(options: GlobeAdapterOptions): MapAdapter {
       markerLayer?.remove();
       markerLayer = null;
       map?.off('click' as never);
+      map?.off('move' as never);
+      map?.off('zoom' as never);
       map?.remove();
       map = null;
       void container;
@@ -8805,7 +8843,7 @@ The adapter is written against a structural `MapLike` type, not against Mapbox's
 - [ ] **Step 12: Run the whole map suite and typecheck**
 
 Run: `npx vitest run --project web apps/web/src/map && npm run typecheck -w @atlas/web`
-Expected: PASS, 4 files / 19 tests; `tsc --noEmit` clean.
+Expected: PASS, 6 files / 32 tests; `tsc --noEmit` clean.
 
 - [ ] **Step 13: Add the marker-layer styles to `components.css`**
 
@@ -8816,6 +8854,7 @@ Append to `apps/web/src/styles/components.css`:
   inset: 0;
   pointer-events: none;
   z-index: 5;
+  overflow: hidden;
 }
 
 .atlas-marker {
