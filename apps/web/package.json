@@ -21,6 +21,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@types/mapbox-gl": "^3.4.1",
     "jsdom": "^25.0.1",
+    "serve": "^14.2.6",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "vitest": "^3.0.0"

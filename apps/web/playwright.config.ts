@@ -12,19 +12,27 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: 'on-first-retry',
+    launchOptions: {
+      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+    },
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        },
+      },
     },
   ],
   webServer: [
     {
-      command: 'npm run dev --workspace @atlas/api',
+      command: 'node --experimental-strip-types apps/api/src/server.ts',
       url: `http://127.0.0.1:${API_PORT}/api/health`,
       reuseExistingServer: !process.env['CI'],
-      timeout: 60_000,
+      timeout: 120_000,
       env: {
         NODE_ENV: 'test',
         PORT: String(API_PORT),
@@ -34,11 +42,12 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev --workspace @atlas/web',
+      command: 'vite',
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: !process.env['CI'],
-      timeout: 60_000,
+      timeout: 120_000,
       env: { VITE_API_BASE_URL: `http://127.0.0.1:${API_PORT}` },
+      cwd: 'apps/web',
     },
   ],
 });

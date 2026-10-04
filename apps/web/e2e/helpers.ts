@@ -5,6 +5,8 @@ export async function gotoAtlas(page: Page, options: { map?: 'globe' | 'fallback
   await page.goto(`/${query}`);
   await expect(page.getByTestId('app-root')).toBeVisible();
   await expect(page.getByTestId('api-status')).toBeVisible();
+  // Wait for project list to load (fallback mode loads projects after API responses)
+  await expect.poll(() => page.locator('[data-project-id]').count(), { timeout: 15000 }).toBeGreaterThan(0);
 }
 
 export async function expectStatus(page: Page, state: 'ok' | 'error'): Promise<void> {

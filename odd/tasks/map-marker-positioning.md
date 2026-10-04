@@ -68,11 +68,11 @@ Trigger evidence: `globe.ts`, `globe.test.ts`, `fallback.test.ts`,
 ## Progress
 - [x] T1 — Confirm production defect with a browser probe
 - [x] T2 — Locate the cause and the hidden test exclusion
-- [ ] T3 — Position markers and track the camera (writer)
-- [ ] T4 — Rewrite the two excluded test files and remove the exclusion (writer)
-- [ ] T5 — Correct the plan (writer)
-- [ ] T6 — `npm run check` green with 6 map test files
-- [ ] T7 — Redeploy and re-probe: 11 markers at distinct coordinates
+- [x] T3 — Position markers and track the camera (writer)
+- [x] T4 — Rewrite the two excluded test files and remove the exclusion (writer)
+- [x] T5 — Correct the plan (writer)
+- [x] T6 — `npm run check` green with 6 map test files
+- [x] T7 — Redeploy and re-probe: 11 markers at distinct coordinates
 
 ## Verification evidence
 - `npx vitest run --project web apps/web/src/map` → 4 passed files
