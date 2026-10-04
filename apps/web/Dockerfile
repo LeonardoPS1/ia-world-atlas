@@ -4,20 +4,19 @@ WORKDIR /app
 ARG VITE_API_BASE_URL=/api
 ARG VITE_MAPBOX_STYLE=mapbox://styles/mapbox/dark-v11
 ARG VITE_ALLOW_HTTP_SOURCES=false
-# Mapbox token passed via Docker secret at build time
-RUN --mount=type=secret,id=vite_mapbox_token \
-  VITE_MAPBOX_TOKEN="$(cat /run/secrets/vite_mapbox_token)" \
-  VITE_API_BASE_URL=${VITE_API_BASE_URL} \
-  VITE_MAPBOX_STYLE=${VITE_MAPBOX_STYLE} \
-  VITE_ALLOW_HTTP_SOURCES=${VITE_ALLOW_HTTP_SOURCES} \
-  npm ci --workspace @atlas/contracts --workspace @atlas/web --include-workspace-root
+
+COPY package.json package-lock.json ./
+COPY packages/contracts/package.json packages/contracts/
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+RUN npm ci --workspace @atlas/contracts --workspace @atlas/web --include-workspace-root
 
 COPY tsconfig.base.json ./
 COPY packages/contracts packages/contracts
 COPY apps/web apps/web
 
 RUN --mount=type=secret,id=vite_mapbox_token \
-  VITE_MAPBOX_TOKEN="$(cat /run/secrets/vite_mapbox_token)" \
+  VITE_MAPBOX_TOKEN="$(cat /run/secrets/vite_mapbox_token 2>/dev/null || echo '')" \
   VITE_API_BASE_URL=${VITE_API_BASE_URL} \
   VITE_MAPBOX_STYLE=${VITE_MAPBOX_STYLE} \
   VITE_ALLOW_HTTP_SOURCES=${VITE_ALLOW_HTTP_SOURCES} \

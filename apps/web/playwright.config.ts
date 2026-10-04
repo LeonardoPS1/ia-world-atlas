@@ -29,7 +29,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'node --experimental-strip-types apps/api/src/server.ts',
+      command: 'node --experimental-strip-types ../api/src/server.ts',
       url: `http://127.0.0.1:${API_PORT}/api/health`,
       reuseExistingServer: !process.env['CI'],
       timeout: 120_000,
@@ -46,8 +46,7 @@ export default defineConfig({
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: !process.env['CI'],
       timeout: 120_000,
-      env: { VITE_API_BASE_URL: `http://127.0.0.1:${API_PORT}` },
-      cwd: 'apps/web',
+      env: { VITE_API_BASE_URL: '/api' },
     },
   ],
 });

@@ -55,7 +55,11 @@ jobs:
       - name: Wait for PostGIS to be ready
         run: |
           for i in $(seq 1 30); do
-            if psql -h localhost -U atlas -d aiworldatlas_test -c "SELECT 1" >/dev/null 2>&1; then break; fi
+            if node -e "const{Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.end()).then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; then
+              echo "PostGIS is ready"
+              break
+            fi
+            echo "Waiting for PostGIS... ($i)"
             sleep 2
           done
       - run: npm run db:migrate
@@ -85,21 +89,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
-      - name: Start API server
-        run: |
-          cd apps/api
-          ATLAS_REPOS=memory node --experimental-strip-types src/server.ts &
-          sleep 5
-          curl -f http://localhost:8787/api/health
-      - name: Start Web server
-        run: |
-          cd apps/web
-          VITE_API_BASE_URL=http://localhost:8787/api VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }} npm run build
-          npx serve dist -l 5173 -s &
-          sleep 5
-          curl -f http://localhost:5173
       - run: npm run test:e2e
         working-directory: apps/web
+      - name: Show API/web logs on failure
+        if: failure()
+        run: |
+          echo "=== API log ==="
+          cat /tmp/playwright-artifacts-*/*.log 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
