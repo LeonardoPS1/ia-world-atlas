@@ -52,6 +52,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      - name: Wait for PostGIS to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if psql -h localhost -U atlas -d aiworldatlas_test -c "SELECT 1" >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
       - run: npm run db:migrate
       - run: npm run db:seed
       - run: npm run test
@@ -69,6 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: 'true'
+      VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,7 +85,21 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
+      - name: Start API server
+        run: |
+          cd apps/api
+          ATLAS_REPOS=memory node --experimental-strip-types src/server.ts &
+          sleep 5
+          curl -f http://localhost:8787/api/health
+      - name: Start Web server
+        run: |
+          cd apps/web
+          VITE_API_BASE_URL=http://localhost:8787/api VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }} npm run build
+          npx serve dist -l 5173 -s &
+          sleep 5
+          curl -f http://localhost:5173
       - run: npm run test:e2e
+        working-directory: apps/web
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -86,7 +107,7 @@ jobs:
           path: apps/web/playwright-report
           retention-days: 7
 
-  images:
+images:
     name: Container images
     runs-on: ubuntu-latest
     steps:
@@ -108,10 +129,10 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: false
-          build-args: |
-            VITE_MAPBOX_TOKEN=
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secrets: |
+            vite_mapbox_token=${{ secrets.VITE_MAPBOX_TOKEN }}
       - name: Boot the stack and probe it
         run: |
           docker compose up --build -d
