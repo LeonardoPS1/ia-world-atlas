@@ -135,8 +135,8 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          secrets: |
-            vite_mapbox_token=${{ secrets.VITE_MAPBOX_TOKEN }}
+          build-args: |
+            VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }}
       - name: Boot the stack and probe it
         run: |
           docker compose up --build -d
